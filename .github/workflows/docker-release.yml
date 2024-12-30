@@ -4,148 +4,42 @@ on:
   workflow_dispatch:
   push:
     tags: '*'
-    branches:
-      - develop
-      - main
+
+env:
+  ECR_REPO: 305587085711.dkr.ecr.us-west-2.amazonaws.com/bnb-chain
 
 jobs:
   # Push image to GitHub Packages.
   push-op-node:
-    runs-on: ubuntu-latest
+    runs-on: ["self-hosted", "linux", "x64", "ubuntu-latest"]
 
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v2
-      - name: Login to GHCR
-        uses: docker/login-action@v2
+      - name: Login to ECR
+        uses: docker/login-action@v3
         with:
-          registry: ghcr.io
-          username: ${{ github.repository_owner }}
-          password: ${{ secrets.GITHUB_TOKEN }}
+          registry: 305587085711.dkr.ecr.us-west-2.amazonaws.com
+          username: ${{ secrets.ECR_ACCESS_KEY_ID }}
+          password: ${{ secrets.ECR_ACCESS_KEY }}
       - name: image meta
         id: meta
         uses: docker/metadata-action@v5
         with:
           images: |
-            ghcr.io/${{ github.repository_owner }}/op-node
+            ${{ env.ECR_REPO }}
           tags: |
             type=ref,event=branch
             type=ref,event=tag
-            type=semver,pattern={{version}}
-            type=sha
+            type=sha,prefix=op-node-,format=short
+            type=raw,value=op-node-latest
       - name: Build and push
-        uses: docker/build-push-action@v4
+        uses: docker/build-push-action@v5
         with:
           context: .
           file: ./op-node/Dockerfile
           push: true
           tags: ${{ steps.meta.outputs.tags }}
-          labels: ${{ steps.meta.outputs.labels }}
-          platforms: linux/amd64,linux/arm64
-          provenance: false
-
-  push-op-batcher:
-    runs-on: ubuntu-latest
-
-    steps:
-      - uses: actions/checkout@v3
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v2
-      - name: Login to GHCR
-        uses: docker/login-action@v2
-        with:
-          registry: ghcr.io
-          username: ${{ github.repository_owner }}
-          password: ${{ secrets.GITHUB_TOKEN }}
-      - name: image meta
-        id: meta
-        uses: docker/metadata-action@v5
-        with:
-          images: |
-            ghcr.io/${{ github.repository_owner }}/op-batcher
-          tags: |
-            type=ref,event=branch
-            type=ref,event=tag
-            type=semver,pattern={{version}}
-            type=sha
-      - name: Build and push
-        uses: docker/build-push-action@v4
-        with:
-          context: .
-          file: ./op-batcher/Dockerfile
-          push: true
-          tags: ${{ steps.meta.outputs.tags }}
-          labels: ${{ steps.meta.outputs.labels }}
-          platforms: linux/amd64,linux/arm64
-          provenance: false
-
-  push-op-proposer:
-    runs-on: ubuntu-latest
-
-    steps:
-      - uses: actions/checkout@v3
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v2
-      - name: Login to GHCR
-        uses: docker/login-action@v2
-        with:
-          registry: ghcr.io
-          username: ${{ github.repository_owner }}
-          password: ${{ secrets.GITHUB_TOKEN }}
-      - name: image meta
-        id: meta
-        uses: docker/metadata-action@v5
-        with:
-          images: |
-            ghcr.io/${{ github.repository_owner }}/op-proposer
-          tags: |
-            type=ref,event=branch
-            type=ref,event=tag
-            type=semver,pattern={{version}}
-            type=sha
-      - name: Build and push
-        uses: docker/build-push-action@v4
-        with:
-          context: .
-          file: ./op-proposer/Dockerfile
-          push: true
-          tags: ${{ steps.meta.outputs.tags }}
-          labels: ${{ steps.meta.outputs.labels }}
-          platforms: linux/amd64,linux/arm64
-          provenance: false
-
-  push-op-bootnode:
-    runs-on: ubuntu-latest
-
-    steps:
-      - uses: actions/checkout@v3
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v2
-      - name: Login to GHCR
-        uses: docker/login-action@v2
-        with:
-          registry: ghcr.io
-          username: ${{ github.repository_owner }}
-          password: ${{ secrets.GITHUB_TOKEN }}
-      - name: image meta
-        id: meta
-        uses: docker/metadata-action@v5
-        with:
-          images: |
-            ghcr.io/${{ github.repository_owner }}/op-bootnode
-          tags: |
-            type=ref,event=branch
-            type=ref,event=tag
-            type=semver,pattern={{version}}
-            type=sha
-      - name: Build and push
-        uses: docker/build-push-action@v4
-        with:
-          context: .
-          file: ./op-bootnode/Dockerfile
-          push: true
-          tags: ${{ steps.meta.outputs.tags }}
-          labels: ${{ steps.meta.outputs.labels }}
-          platforms: linux/amd64,linux/arm64
-          provenance: false
