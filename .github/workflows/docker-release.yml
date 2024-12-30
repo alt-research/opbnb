@@ -3,7 +3,7 @@ name: DockerImage build and push
 on:
   workflow_dispatch:
   push:
-    tags: '*'
+    tags: ['*']
 
 env:
   ECR_REPO: 305587085711.dkr.ecr.us-west-2.amazonaws.com/bnb-chain
