@@ -46,7 +46,10 @@ contract L2OutputOracle is Initializable, ISemver {
 
     // TODO: compute accurate hardfork block number
     /// @notice The L2 block number of Volta Hardfork.
-    uint256 public constant voltaBlockNumber = 0;
+    /// Genesis Timestamp = 1744790747
+    /// Volta Hardfork Timestamp = 1744947000
+    /// voltaBlockNumber = 1744947000 - 1744790747 = 156253
+    uint256 public constant voltaBlockNumber = 156253;
 
     /// @notice Emitted when an output is proposed.
     /// @param outputRoot    The output root.
