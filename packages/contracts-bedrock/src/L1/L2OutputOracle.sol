@@ -54,7 +54,13 @@ contract L2OutputOracle is Initializable, ISemver {
   uint256 public constant L2_FOURIER_MILLISECONDS_BLOCK_TIME = 250;
 
   /// @notice The L2 block number of Fourier Hardfork.
-  uint256 public constant FOURIER_BLOCK_NUMBER = 0;
+  /// opBNB testnet 's hardfork is   1762398000 (2025-11-06 11:00:00 UTC+8)
+  /// Matchain opBnB's hardfork is   1767841200 (2026-01-08 11:00:00 UTC+8)
+  /// number after volta = 1767841200 - 1745478000 = 22363200 / 0.5 = 44726400
+  /// FOURIER_BLOCK_NUMBER = 24169212 + 44726400 = 68895612
+  /// Check: current block is 63567938 with time 1765177363, after 2663837s is
+  /// 2663837 / 0.5 =  5327674 + 63567938 = 68895612
+  uint256 public constant FOURIER_BLOCK_NUMBER = 68895612;
 
   /// @notice Emitted when an output is proposed.
   /// @param outputRoot    The output root.
