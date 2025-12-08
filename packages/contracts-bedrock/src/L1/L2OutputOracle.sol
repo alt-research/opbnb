@@ -45,7 +45,10 @@ contract L2OutputOracle is Initializable, ISemver {
     uint256 public constant L2_MILLISECONDS_BLOCK_TIME = 500;
 
     /// @notice The L2 block number of Volta Hardfork.
-    uint256 public constant VOLTA_BLOCK_NUMBER = 0;
+    /// Genesis Timestamp = 1731309441
+    /// Volta Hardfork Timestamp = 1745463601
+    /// voltaBlockNumber = (1745463601 - 1731309441) / 2 = 7077080
+    uint256 public constant VOLTA_BLOCK_NUMBER = 7077080;
 
     /// @notice The time between L2 blocks in milliseconds after Fourier Hardfork.
     uint256 public constant L2_FOURIER_MILLISECONDS_BLOCK_TIME = 250;
