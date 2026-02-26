@@ -146,6 +146,9 @@ func (c *OpConductor) initSequencerControl(ctx context.Context) error {
 
 func (c *OpConductor) initConsensus(ctx context.Context) error {
 	if c.cons != nil {
+		// also need set leader update channel from the cons when use consensus.
+		c.leaderUpdateCh = c.cons.LeaderCh()
+
 		return nil
 	}
 
