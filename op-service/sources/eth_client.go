@@ -344,10 +344,10 @@ func (s *EthClient) FetchReceipts(ctx context.Context, blockHash common.Hash) (e
 
 // syscfgLogFilter is the JSON structure for the eth_getLogs filter parameter.
 type syscfgLogFilter struct {
-	FromBlock string         `json:"fromBlock"`
-	ToBlock   string         `json:"toBlock"`
-	Address   common.Address `json:"address"`
-	Topics    []interface{}  `json:"topics"`
+	FromBlock string          `json:"fromBlock"`
+	ToBlock   string          `json:"toBlock"`
+	Address   common.Address  `json:"address"`
+	Topics    []common.Hash   `json:"topics"`
 }
 
 // FetchSystemConfigLogs fetches logs from [fromBlock, toBlock] filtered to the
@@ -357,7 +357,7 @@ func (s *EthClient) FetchSystemConfigLogs(ctx context.Context, fromBlock, toBloc
 		FromBlock: hexutil.EncodeUint64(fromBlock),
 		ToBlock:   hexutil.EncodeUint64(toBlock),
 		Address:   addr,
-		Topics:    []interface{}{topic},
+		Topics:    []common.Hash{topic},
 	}
 	var logs []*types.Log
 	if err := s.client.CallContext(ctx, &logs, "eth_getLogs", filter); err != nil {

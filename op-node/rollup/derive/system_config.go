@@ -58,6 +58,9 @@ func UpdateSystemConfigWithL1Logs(sysCfg *eth.SystemConfig, logs []*types.Log, c
 		if lg.BlockNumber != blockNumber {
 			continue
 		}
+		if lg.Address != cfg.L1SystemConfigAddress {
+			continue
+		}
 		if err := ProcessSystemConfigUpdateLogEvent(sysCfg, lg, cfg, l1Time); err != nil {
 			result = multierror.Append(result, fmt.Errorf("malformatted L1 system sysCfg log at block %d, log %d: %w", blockNumber, j, err))
 		}

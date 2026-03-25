@@ -238,7 +238,7 @@ func TestEthClient_FetchSystemConfigLogs(t *testing.T) {
 
 	// CallContext receives (ctx, result, method, args...).
 	// The variadic args are passed as []interface{}{filter} to MethodCalled.
-	m.On("CallContext", mock.Anything, mock.AnythingOfType("*[]*types.Log"),
+	m.On("CallContext", mock.Anything, mock.Anything,
 		"eth_getLogs", mock.Anything).
 		Run(func(args mock.Arguments) {
 			result := args.Get(1).(*[]*types.Log)
