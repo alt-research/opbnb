@@ -123,19 +123,16 @@ func FindL2Heads(ctx context.Context, cfg *rollup.Config, l1 L1Chain, l2 L2Chain
 
 	// Opt-2: batch pre-fetch L1 block refs to warm the hash-keyed cache before walk-back.
 	// Non-fatal if it fails — the loop will fetch individually.
-	if bp, ok := l1.(L1BatchPrefetcher); ok && result.Unsafe.L1Origin.Number > result.Finalized.L1Origin.Number {
-		batchSize := syncCfg.WalkbackPrefetchBatch
-		if batchSize <= 0 {
-			batchSize = 20
-		}
-		lgr.Info("batch pre-fetching L1 block refs for walk-back",
+	// WalkbackPrefetchBatch == 0 disables the pre-fetch.
+	if bp, ok := l1.(L1BatchPrefetcher); ok && syncCfg.WalkbackPrefetchBatch > 0 && result.Unsafe.L1Origin.Number > result.Finalized.L1Origin.Number {
+		lgr.Debug("batch pre-fetching L1 block refs for walk-back",
 			"from", result.Finalized.L1Origin.Number,
 			"to", result.Unsafe.L1Origin.Number,
-			"batchSize", batchSize)
+			"batchSize", syncCfg.WalkbackPrefetchBatch)
 		if err := bp.BatchPrefetchL1BlockRefsByNumber(ctx,
 			result.Finalized.L1Origin.Number,
 			result.Unsafe.L1Origin.Number,
-			batchSize); err != nil {
+			syncCfg.WalkbackPrefetchBatch); err != nil {
 			lgr.Warn("batch pre-fetch L1 block refs failed, continuing without cache", "err", err)
 		}
 	}

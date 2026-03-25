@@ -12,6 +12,7 @@ import (
 	"github.com/ethereum/go-ethereum/common/hexutil"
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/log"
+	"github.com/ethereum/go-ethereum/rpc"
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 )
@@ -164,4 +165,79 @@ func TestGoOrUpdatePreFetchReceipts(t *testing.T) {
 		_, ok2 := s.recProvider.GetReceiptsCache().Get(76, false)
 		require.True(t, ok2, "76 cache miss")
 	})
+}
+
+func makeMinimalRPCHeader(number uint64) *RPCHeader {
+	return &RPCHeader{
+		TxHash:      types.EmptyTxsHash,
+		ReceiptHash: types.EmptyReceiptsHash,
+		UncleHash:   types.EmptyUncleHash,
+		Number:      hexutil.Uint64(number),
+		Hash:        randHash(),
+	}
+}
+
+func TestBatchPrefetchL1BlockRefsByNumber_PopulatesCache(t *testing.T) {
+	m := new(mockRPC)
+	ctx := context.Background()
+	lgr := testlog.Logger(t, log.LvlDebug)
+	client, err := NewL1Client(m, lgr, nil, L1ClientDefaultConfig(&rollup.Config{SeqWindowSize: 1000}, true, RPCKindBasic))
+	require.NoError(t, err)
+
+	h100 := makeMinimalRPCHeader(100)
+	h101 := makeMinimalRPCHeader(101)
+	h102 := makeMinimalRPCHeader(102)
+
+	m.On("BatchCallContext", ctx, mock.Anything).
+		Run(func(args mock.Arguments) {
+			elems := args.Get(1).([]rpc.BatchElem)
+			headers := []*RPCHeader{h100, h101, h102}
+			for i := range elems {
+				*elems[i].Result.(**RPCHeader) = headers[i]
+			}
+		}).
+		Return([]error{nil})
+
+	err = client.BatchPrefetchL1BlockRefsByNumber(ctx, 100, 102, 10)
+	require.NoError(t, err)
+
+	// All three refs should now be in the cache
+	_, ok100 := client.l1BlockRefsCache.Get(h100.Hash)
+	_, ok101 := client.l1BlockRefsCache.Get(h101.Hash)
+	_, ok102 := client.l1BlockRefsCache.Get(h102.Hash)
+	require.True(t, ok100, "block 100 not in cache")
+	require.True(t, ok101, "block 101 not in cache")
+	require.True(t, ok102, "block 102 not in cache")
+	m.AssertExpectations(t)
+}
+
+func TestBatchPrefetchL1BlockRefsByNumber_BatchChunking(t *testing.T) {
+	m := new(mockRPC)
+	ctx := context.Background()
+	lgr := testlog.Logger(t, log.LvlDebug)
+	client, err := NewL1Client(m, lgr, nil, L1ClientDefaultConfig(&rollup.Config{SeqWindowSize: 1000}, true, RPCKindBasic))
+	require.NoError(t, err)
+
+	// 5 blocks with batchSize=2 → 3 BatchCallContext calls (2+2+1)
+	headers := make([]*RPCHeader, 5)
+	for i := range headers {
+		headers[i] = makeMinimalRPCHeader(uint64(100 + i))
+	}
+
+	callCount := 0
+	m.On("BatchCallContext", ctx, mock.Anything).
+		Run(func(args mock.Arguments) {
+			elems := args.Get(1).([]rpc.BatchElem)
+			offset := callCount * 2
+			for i := range elems {
+				*elems[i].Result.(**RPCHeader) = headers[offset+i]
+			}
+			callCount++
+		}).
+		Return([]error{nil})
+
+	err = client.BatchPrefetchL1BlockRefsByNumber(ctx, 100, 104, 2)
+	require.NoError(t, err)
+	require.Equal(t, 3, callCount, "expected 3 batch calls for 5 blocks with batchSize=2")
+	m.AssertExpectations(t)
 }
