@@ -5,6 +5,7 @@ import (
 
 	"github.com/ethereum-optimism/optimism/op-service/eth"
 	"github.com/ethereum/go-ethereum/common"
+	"github.com/ethereum/go-ethereum/core/types"
 )
 
 type MockL1Source struct {
@@ -53,4 +54,13 @@ func (m *MockL1Source) ClearReceiptsCacheBefore(blockNumber uint64) {
 
 func (m *MockL1Source) ExpectClearReceiptsCacheBefore(blockNumber uint64) {
 	m.Mock.On("ClearReceiptsCacheBefore", blockNumber).Once()
+}
+
+func (m *MockL1Source) FetchSystemConfigLogs(ctx context.Context, fromBlock, toBlock uint64, addr common.Address, topic common.Hash) ([]*types.Log, error) {
+	out := m.Mock.MethodCalled("FetchSystemConfigLogs", fromBlock, toBlock, addr, topic)
+	return out[0].([]*types.Log), *out[1].(*error)
+}
+
+func (m *MockL1Source) ExpectFetchSystemConfigLogs(fromBlock, toBlock uint64, addr common.Address, topic common.Hash, logs []*types.Log, err error) {
+	m.Mock.On("FetchSystemConfigLogs", fromBlock, toBlock, addr, topic).Once().Return(logs, &err)
 }
