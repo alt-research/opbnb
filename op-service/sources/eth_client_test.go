@@ -226,3 +226,37 @@ func TestReceiptValidation(t *testing.T) {
 	_, _, err := ethcl.FetchReceipts(ctx, block.Hash)
 	require.ErrorContains(err, "unexpected nil block number")
 }
+
+func TestEthClient_FetchSystemConfigLogs(t *testing.T) {
+	m := new(mockRPC)
+	cfg := &EthClientConfig{
+		MaxRequestsPerBatch:   10,
+		MaxConcurrentRequests: 10,
+		ReceiptsCacheSize:     10,
+		TransactionsCacheSize: 10,
+		HeadersCacheSize:      10,
+		PayloadsCacheSize:     10,
+		TrustRPC:              true,
+	}
+	client, err := NewEthClient(m, nil, nil, cfg, false)
+	require.NoError(t, err)
+
+	addr := common.Address{0x42}
+	topic := common.Hash{0x01}
+	expectedLogs := []*types.Log{{BlockNumber: 100}}
+
+	// CallContext receives (ctx, result, method, args...).
+	// The variadic args are passed as []interface{}{filter} to MethodCalled.
+	m.On("CallContext", mock.Anything, mock.AnythingOfType("*[]*types.Log"),
+		"eth_getLogs", mock.Anything).
+		Run(func(args mock.Arguments) {
+			result := args.Get(1).(*[]*types.Log)
+			*result = expectedLogs
+		}).
+		Return([]error{nil})
+
+	got, err := client.FetchSystemConfigLogs(context.Background(), 100, 200, addr, topic)
+	require.NoError(t, err)
+	require.Equal(t, expectedLogs, got)
+	m.AssertExpectations(t)
+}

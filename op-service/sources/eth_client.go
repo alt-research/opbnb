@@ -342,6 +342,30 @@ func (s *EthClient) FetchReceipts(ctx context.Context, blockHash common.Hash) (e
 	return blockInfo, receipts, err
 }
 
+// syscfgLogFilter is the JSON structure for the eth_getLogs filter parameter.
+type syscfgLogFilter struct {
+	FromBlock string         `json:"fromBlock"`
+	ToBlock   string         `json:"toBlock"`
+	Address   common.Address `json:"address"`
+	Topics    []interface{}  `json:"topics"`
+}
+
+// FetchSystemConfigLogs fetches logs from [fromBlock, toBlock] filtered to the
+// given contract address and first topic. Uses eth_getLogs via CallContext.
+func (s *EthClient) FetchSystemConfigLogs(ctx context.Context, fromBlock, toBlock uint64, addr common.Address, topic common.Hash) ([]*types.Log, error) {
+	filter := syscfgLogFilter{
+		FromBlock: hexutil.EncodeUint64(fromBlock),
+		ToBlock:   hexutil.EncodeUint64(toBlock),
+		Address:   addr,
+		Topics:    []interface{}{topic},
+	}
+	var logs []*types.Log
+	if err := s.client.CallContext(ctx, &logs, "eth_getLogs", filter); err != nil {
+		return nil, fmt.Errorf("eth_getLogs [%d,%d]: %w", fromBlock, toBlock, err)
+	}
+	return logs, nil
+}
+
 func (s *EthClient) PreFetchReceipts(ctx context.Context, blockHash common.Hash) (bool, error) {
 	_, _, err, isFull := s.fetchReceiptsInner(ctx, blockHash, true)
 	if err != nil {

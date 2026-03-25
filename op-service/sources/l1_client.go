@@ -10,6 +10,7 @@ import (
 
 	"github.com/ethereum/go-ethereum"
 	"github.com/ethereum/go-ethereum/common"
+	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/log"
 
 	"github.com/ethereum-optimism/optimism/op-node/rollup"
@@ -263,6 +264,11 @@ func (s *L1Client) GoOrUpdatePreFetchReceipts(ctx context.Context, l1Start uint6
 func (s *L1Client) ClearReceiptsCacheBefore(blockNumber uint64) {
 	s.log.Debug("clear receipts cache before", "blockNumber", blockNumber)
 	s.recProvider.GetReceiptsCache().RemoveLessThan(blockNumber)
+}
+
+// FetchSystemConfigLogs fetches ConfigUpdate logs for [fromBlock, toBlock] in one RPC call.
+func (s *L1Client) FetchSystemConfigLogs(ctx context.Context, fromBlock, toBlock uint64, addr common.Address, topic common.Hash) ([]*types.Log, error) {
+	return s.EthClient.FetchSystemConfigLogs(ctx, fromBlock, toBlock, addr, topic)
 }
 
 func (s *L1Client) Close() {
