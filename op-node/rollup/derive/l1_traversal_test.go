@@ -178,6 +178,44 @@ func TestL1TraversalAdvance_LogRangeCache(t *testing.T) {
 	l1Src.AssertExpectations(t)
 }
 
+// TestL1TraversalAdvance_LogRangeCacheReuse verifies that a second AdvanceL1Block
+// within the same prefetch window does NOT trigger another FetchSystemConfigLogs call.
+func TestL1TraversalAdvance_LogRangeCacheReuse(t *testing.T) {
+	rng := rand.New(rand.NewSource(5678))
+	a := testutils.RandomBlockRef(rng)
+	b := testutils.RandomBlockRef(rng)
+	b.Number = a.Number + 1
+	b.ParentHash = a.Hash
+	c := testutils.RandomBlockRef(rng)
+	c.Number = b.Number + 1
+	c.ParentHash = b.Hash
+
+	l1Cfg := eth.SystemConfig{BatcherAddr: testutils.RandomAddress(rng)}
+	sysCfgAddr := testutils.RandomAddress(rng)
+	cfg := &rollup.Config{
+		Genesis:               rollup.Genesis{SystemConfig: l1Cfg},
+		L1SystemConfigAddress: sysCfgAddr,
+	}
+	tCfg := L1TraversalConfig{SyscfgLogRange: 10}
+
+	l1Src := &testutils.MockL1Source{}
+	l1Src.ExpectL1BlockRefByNumber(b.Number, b, nil)
+	l1Src.ExpectL1BlockRefByNumber(c.Number, c, nil)
+	// FetchSystemConfigLogs should be called ONCE for the range [b.Number, b.Number+9].
+	// The second advance (block c) is within the same window and must NOT trigger another call.
+	l1Src.ExpectFetchSystemConfigLogs(b.Number, b.Number+9, sysCfgAddr, ConfigUpdateEventABIHash, nil, nil)
+
+	tr := NewL1Traversal(testlog.Logger(t, log.LevelError), cfg, l1Src, tCfg)
+	_ = tr.Reset(context.Background(), a, l1Cfg)
+
+	err := tr.AdvanceL1Block(context.Background())
+	require.NoError(t, err)
+	err = tr.AdvanceL1Block(context.Background())
+	require.NoError(t, err)
+
+	l1Src.AssertExpectations(t) // fails if FetchSystemConfigLogs was called twice
+}
+
 func TestL1TraversalReset_ClearsLogCache(t *testing.T) {
 	rng := rand.New(rand.NewSource(42))
 	a := testutils.RandomBlockRef(rng)

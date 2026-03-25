@@ -28,7 +28,8 @@ type L1BlockRefByNumberFetcher interface {
 // Not consensus-critical — do not add to rollup.Config.
 type L1TraversalConfig struct {
 	// SyscfgLogRange is the number of L1 blocks per eth_getLogs call for system
-	// config updates. Default 1000. Set to 0 to fall back to per-block receipt fetch.
+	// config updates. Set to 0 to fall back to per-block receipt fetch.
+	// The CLI flag (l1.syscfg-log-range) defaults to 1000.
 	SyscfgLogRange uint64
 }
 
