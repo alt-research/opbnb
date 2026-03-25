@@ -326,9 +326,10 @@ func NewSyncConfig(ctx *cli.Context, log log.Logger) (*sync.Config, error) {
 		elTriggerGap = 120
 	}
 	cfg := &sync.Config{
-		SyncMode:           mode,
-		SkipSyncStartCheck: ctx.Bool(flags.SkipSyncStartCheck.Name),
-		ELTriggerGap:       elTriggerGap,
+		SyncMode:              mode,
+		SkipSyncStartCheck:    ctx.Bool(flags.SkipSyncStartCheck.Name),
+		ELTriggerGap:          elTriggerGap,
+		WalkbackPrefetchBatch: ctx.Int(flags.L1WalkbackPrefetchBatch.Name),
 	}
 	if ctx.Bool(flags.L2EngineSyncEnabled.Name) {
 		cfg.SyncMode = sync.ELSync

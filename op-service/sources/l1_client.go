@@ -10,8 +10,10 @@ import (
 
 	"github.com/ethereum/go-ethereum"
 	"github.com/ethereum/go-ethereum/common"
+	"github.com/ethereum/go-ethereum/common/hexutil"
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/log"
+	"github.com/ethereum/go-ethereum/rpc"
 
 	"github.com/ethereum-optimism/optimism/op-node/rollup"
 	"github.com/ethereum-optimism/optimism/op-service/client"
@@ -269,6 +271,51 @@ func (s *L1Client) ClearReceiptsCacheBefore(blockNumber uint64) {
 // FetchSystemConfigLogs fetches ConfigUpdate logs for [fromBlock, toBlock] in one RPC call.
 func (s *L1Client) FetchSystemConfigLogs(ctx context.Context, fromBlock, toBlock uint64, addr common.Address, topic common.Hash) ([]*types.Log, error) {
 	return s.EthClient.FetchSystemConfigLogs(ctx, fromBlock, toBlock, addr, topic)
+}
+
+// BatchPrefetchL1BlockRefsByNumber fetches L1 block headers for [from, to] in
+// batches of batchSize using BatchCallContext, populating l1BlockRefsCache.
+// Used by FindL2Heads to pre-warm the hash-keyed cache before walk-back.
+func (s *L1Client) BatchPrefetchL1BlockRefsByNumber(ctx context.Context, from, to uint64, batchSize int) error {
+	if batchSize <= 0 {
+		batchSize = 20
+	}
+	for start := from; start <= to; start += uint64(batchSize) {
+		end := start + uint64(batchSize) - 1
+		if end > to {
+			end = to
+		}
+		count := int(end - start + 1)
+		headers := make([]*RPCHeader, count)
+		elems := make([]rpc.BatchElem, count)
+		for i := 0; i < count; i++ {
+			elems[i] = rpc.BatchElem{
+				Method: "eth_getBlockByNumber",
+				Args:   []interface{}{hexutil.EncodeUint64(start + uint64(i)), false},
+				Result: &headers[i],
+			}
+		}
+		if err := s.client.BatchCallContext(ctx, elems); err != nil {
+			return fmt.Errorf("batch prefetch L1 block refs [%d,%d]: %w", start, end, err)
+		}
+		for i, elem := range elems {
+			if elem.Error != nil {
+				s.log.Warn("batch prefetch L1 block ref error", "number", start+uint64(i), "err", elem.Error)
+				continue
+			}
+			if headers[i] == nil {
+				continue
+			}
+			info, err := headers[i].Info(s.trustRPC, s.mustBePostMerge)
+			if err != nil {
+				s.log.Warn("batch prefetch L1 block ref info error", "number", start+uint64(i), "err", err)
+				continue
+			}
+			ref := eth.InfoToL1BlockRef(info)
+			s.l1BlockRefsCache.Add(ref.Hash, ref)
+		}
+	}
+	return nil
 }
 
 func (s *L1Client) Close() {

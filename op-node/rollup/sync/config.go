@@ -72,4 +72,7 @@ type Config struct {
 	SkipSyncStartCheck bool `json:"skip_sync_start_check"`
 	// gap for trigger el-sync
 	ELTriggerGap int `json:"el_trigger_gap"`
+	// WalkbackPrefetchBatch is the batch size for L1 block ref pre-fetch
+	// during FindL2Heads walk-back. Default 20. Set to 0 to disable.
+	WalkbackPrefetchBatch int `json:"walkback_prefetch_batch"`
 }

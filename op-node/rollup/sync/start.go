@@ -48,6 +48,13 @@ type L2Chain interface {
 	L2BlockRefByLabel(ctx context.Context, label eth.BlockLabel) (eth.L2BlockRef, error)
 }
 
+// L1BatchPrefetcher is an optional interface. If the L1Chain implementation
+// supports it, FindL2Heads will use it to pre-warm the block ref cache before
+// the walk-back loop, reducing per-step RPC latency.
+type L1BatchPrefetcher interface {
+	BatchPrefetchL1BlockRefsByNumber(ctx context.Context, from, to uint64, batchSize int) error
+}
+
 var ReorgFinalizedErr = errors.New("cannot reorg finalized block")
 var WrongChainErr = errors.New("wrong chain")
 var TooDeepReorgErr = errors.New("reorg is too deep")
@@ -113,6 +120,25 @@ func FindL2Heads(ctx context.Context, cfg *rollup.Config, l1 L1Chain, l2 L2Chain
 
 	lgr.Info("Loaded current L2 heads", "unsafe", result.Unsafe, "safe", result.Safe, "finalized", result.Finalized,
 		"unsafe_origin", result.Unsafe.L1Origin, "safe_origin", result.Safe.L1Origin)
+
+	// Opt-2: batch pre-fetch L1 block refs to warm the hash-keyed cache before walk-back.
+	// Non-fatal if it fails — the loop will fetch individually.
+	if bp, ok := l1.(L1BatchPrefetcher); ok && result.Unsafe.L1Origin.Number > result.Finalized.L1Origin.Number {
+		batchSize := syncCfg.WalkbackPrefetchBatch
+		if batchSize <= 0 {
+			batchSize = 20
+		}
+		lgr.Info("batch pre-fetching L1 block refs for walk-back",
+			"from", result.Finalized.L1Origin.Number,
+			"to", result.Unsafe.L1Origin.Number,
+			"batchSize", batchSize)
+		if err := bp.BatchPrefetchL1BlockRefsByNumber(ctx,
+			result.Finalized.L1Origin.Number,
+			result.Unsafe.L1Origin.Number,
+			batchSize); err != nil {
+			lgr.Warn("batch pre-fetch L1 block refs failed, continuing without cache", "err", err)
+		}
+	}
 
 	// Remember original unsafe block to determine reorg depth
 	prevUnsafe := result.Unsafe
