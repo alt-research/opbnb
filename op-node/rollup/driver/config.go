@@ -1,5 +1,7 @@
 package driver
 
+import "github.com/ethereum-optimism/optimism/op-node/rollup/derive"
+
 type Config struct {
 	// L1FinalizedConfDepth enables using L1 finalized block as the latest head for opBNB sequencer and derivation.
 	// When enabled, VerifierConfDepth and SequencerConfDepth will be ignored.
@@ -34,4 +36,7 @@ type Config struct {
 
 	// L2P2PNode is true when the op-geth is a P2P node.
 	L2P2PNode bool `json:"l2_p2p_node"`
+
+	// L1TraversalConfig holds runtime tuning for the L1 traversal stage.
+	L1TraversalConfig derive.L1TraversalConfig `json:"l1_traversal_config"`
 }

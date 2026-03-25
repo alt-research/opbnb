@@ -178,7 +178,7 @@ func NewDriver(
 
 	attributesHandler := attributes.NewAttributesHandler(log, cfg, engine, l2, driverCfg.L2P2PNode)
 	derivationPipeline := derive.NewDerivationPipeline(log, cfg, verifConfDepth, l1Blobs, plasma, l2, engine,
-		metrics, syncCfg, safeHeadListener, finalizer, attributesHandler)
+		metrics, syncCfg, safeHeadListener, finalizer, attributesHandler, driverCfg.L1TraversalConfig)
 	attrBuilder := derive.NewFetchingAttributesBuilder(cfg, l1, l2)
 	meteredEngine := NewMeteredEngine(cfg, engine, metrics, log) // Only use the metered engine in the sequencer b/c it records sequencing metrics.
 	sequencer := NewSequencer(log, cfg, meteredEngine, attrBuilder, findL1Origin, metrics)

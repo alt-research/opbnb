@@ -67,10 +67,10 @@ type DerivationPipeline struct {
 
 func NewDerivationPipeline(log log.Logger, rollupCfg *rollup.Config, l1Fetcher L1Fetcher, l1Blobs L1BlobsFetcher,
 	plasma PlasmaInputFetcher, l2Source L2Source, engine LocalEngineControl, metrics Metrics,
-	syncCfg *sync.Config, safeHeadListener SafeHeadListener, finalizer FinalizerHooks, attributesHandler AttributesHandler) *DerivationPipeline {
+	syncCfg *sync.Config, safeHeadListener SafeHeadListener, finalizer FinalizerHooks, attributesHandler AttributesHandler, tCfg L1TraversalConfig) *DerivationPipeline {
 
 	// Pull stages
-	l1Traversal := NewL1Traversal(log, rollupCfg, l1Fetcher)
+	l1Traversal := NewL1Traversal(log, rollupCfg, l1Fetcher, tCfg)
 	dataSrc := NewDataSourceFactory(log, rollupCfg, l1Fetcher, l1Blobs, plasma) // auxiliary stage for L1Retrieval
 	l1Src := NewL1Retrieval(log, dataSrc, l1Traversal)
 	frameQueue := NewFrameQueue(log, l1Src)

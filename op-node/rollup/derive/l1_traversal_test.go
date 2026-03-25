@@ -36,7 +36,7 @@ func TestL1TraversalNext(t *testing.T) {
 		Genesis:               rollup.Genesis{SystemConfig: l1Cfg},
 		L1SystemConfigAddress: sysCfgAddr,
 	}
-	tr := NewL1Traversal(testlog.Logger(t, log.LevelError), cfg, nil)
+	tr := NewL1Traversal(testlog.Logger(t, log.LevelError), cfg, nil, L1TraversalConfig{})
 
 	_ = tr.Reset(context.Background(), a, l1Cfg)
 
@@ -132,7 +132,7 @@ func TestL1TraversalAdvance(t *testing.T) {
 				Genesis:               rollup.Genesis{SystemConfig: test.initialL1Cfg},
 				L1SystemConfigAddress: sysCfgAddr,
 			}
-			tr := NewL1Traversal(testlog.Logger(t, log.LevelError), cfg, src)
+			tr := NewL1Traversal(testlog.Logger(t, log.LevelError), cfg, src, L1TraversalConfig{})
 			// Load up the initial state with a reset
 			_ = tr.Reset(context.Background(), test.startBlock, test.initialL1Cfg)
 
@@ -150,4 +150,43 @@ func TestL1TraversalAdvance(t *testing.T) {
 		})
 	}
 
+}
+
+func TestL1TraversalAdvance_LogRangeCache(t *testing.T) {
+	rng := rand.New(rand.NewSource(1234))
+	a := testutils.RandomBlockRef(rng)
+	b := testutils.RandomBlockRef(rng)
+	b.Number = a.Number + 1
+	b.ParentHash = a.Hash
+
+	l1Cfg := eth.SystemConfig{BatcherAddr: testutils.RandomAddress(rng)}
+	sysCfgAddr := testutils.RandomAddress(rng)
+	cfg := &rollup.Config{
+		Genesis:               rollup.Genesis{SystemConfig: l1Cfg},
+		L1SystemConfigAddress: sysCfgAddr,
+	}
+	tCfg := L1TraversalConfig{SyscfgLogRange: 10}
+
+	l1Src := &testutils.MockL1Source{}
+	l1Src.ExpectL1BlockRefByNumber(b.Number, b, nil)
+	l1Src.ExpectFetchSystemConfigLogs(b.Number, b.Number+9, sysCfgAddr, ConfigUpdateEventABIHash, nil, nil)
+
+	tr := NewL1Traversal(testlog.Logger(t, log.LevelError), cfg, l1Src, tCfg)
+	_ = tr.Reset(context.Background(), a, l1Cfg)
+	err := tr.AdvanceL1Block(context.Background())
+	require.NoError(t, err)
+	l1Src.AssertExpectations(t)
+}
+
+func TestL1TraversalReset_ClearsLogCache(t *testing.T) {
+	rng := rand.New(rand.NewSource(42))
+	a := testutils.RandomBlockRef(rng)
+	cfg := &rollup.Config{L1SystemConfigAddress: testutils.RandomAddress(rng)}
+	tCfg := L1TraversalConfig{SyscfgLogRange: 10}
+	tr := NewL1Traversal(testlog.Logger(t, log.LevelError), cfg, nil, tCfg)
+	tr.syscfgLogCache[100] = []*types.Log{{BlockNumber: 100}}
+	tr.nextLogFetch = 110
+	_ = tr.Reset(context.Background(), a, eth.SystemConfig{})
+	require.Empty(t, tr.syscfgLogCache)
+	require.Equal(t, uint64(0), tr.nextLogFetch)
 }

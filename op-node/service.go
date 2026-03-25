@@ -23,6 +23,7 @@ import (
 	"github.com/ethereum-optimism/optimism/op-node/node"
 	p2pcli "github.com/ethereum-optimism/optimism/op-node/p2p/cli"
 	"github.com/ethereum-optimism/optimism/op-node/rollup"
+	"github.com/ethereum-optimism/optimism/op-node/rollup/derive"
 	"github.com/ethereum-optimism/optimism/op-node/rollup/driver"
 	"github.com/ethereum-optimism/optimism/op-node/rollup/sync"
 	opflags "github.com/ethereum-optimism/optimism/op-service/flags"
@@ -216,6 +217,9 @@ func NewDriverConfig(ctx *cli.Context) *driver.Config {
 		SequencerPriority:       ctx.Bool(flags.SequencerPriorityFlag.Name),
 		SequencerCombinedEngine: ctx.Bool(flags.SequencerCombinedEngineFlag.Name),
 		L2P2PNode:               ctx.Bool(flags.IsP2PNodeFlag.Name),
+		L1TraversalConfig: derive.L1TraversalConfig{
+			SyscfgLogRange: ctx.Uint64(flags.L1SyscfgLogRange.Name),
+		},
 	}
 }
 

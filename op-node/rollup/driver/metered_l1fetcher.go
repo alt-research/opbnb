@@ -81,3 +81,8 @@ func (m *MeteredL1Fetcher) ClearReceiptsCacheBefore(blockNumber uint64) {
 	defer m.recordTime("ClearReceiptsCacheBefore")()
 	m.inner.ClearReceiptsCacheBefore(blockNumber)
 }
+
+func (m *MeteredL1Fetcher) FetchSystemConfigLogs(ctx context.Context, fromBlock, toBlock uint64, addr common.Address, topic common.Hash) ([]*types.Log, error) {
+	defer m.recordTime("FetchSystemConfigLogs")()
+	return m.inner.FetchSystemConfigLogs(ctx, fromBlock, toBlock, addr, topic)
+}
