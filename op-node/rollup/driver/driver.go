@@ -211,7 +211,7 @@ func NewDriver(
 		l1HeadSig:          make(chan eth.L1BlockRef, 10),
 		l1SafeSig:          make(chan eth.L1BlockRef, 10),
 		l1FinalizedSig:     make(chan eth.L1BlockRef, 10),
-		unsafeL2Payloads:   make(chan *eth.ExecutionPayloadEnvelope, 10),
+		unsafeL2Payloads:   make(chan *eth.ExecutionPayloadEnvelope, 200),
 		altSync:            altSync,
 		asyncGossiper:      asyncGossiper,
 		sequencerConductor: sequencerConductor,
