@@ -229,16 +229,7 @@ func TestReceiptValidation(t *testing.T) {
 
 func TestEthClient_FetchSystemConfigLogs(t *testing.T) {
 	m := new(mockRPC)
-	cfg := &EthClientConfig{
-		MaxRequestsPerBatch:   10,
-		MaxConcurrentRequests: 10,
-		ReceiptsCacheSize:     10,
-		TransactionsCacheSize: 10,
-		HeadersCacheSize:      10,
-		PayloadsCacheSize:     10,
-		TrustRPC:              true,
-	}
-	client, err := NewEthClient(m, nil, nil, cfg, false)
+	client, err := NewEthClient(m, nil, nil, testEthClientConfig, false)
 	require.NoError(t, err)
 
 	addr := common.Address{0x42}

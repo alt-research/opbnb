@@ -47,6 +47,24 @@ func UpdateSystemConfigWithL1Receipts(sysCfg *eth.SystemConfig, receipts []*type
 	return result
 }
 
+// UpdateSystemConfigWithL1Logs applies ConfigUpdate events from the given logs
+// to sysCfg. Only logs whose BlockNumber equals blockNumber are processed.
+// logs should be pre-filtered to L1SystemConfigAddress and ConfigUpdateEventABIHash
+// (e.g. via eth_getLogs). Unlike UpdateSystemConfigWithL1Receipts, no receipt-status
+// check is performed — eth_getLogs only returns logs from successful transactions.
+func UpdateSystemConfigWithL1Logs(sysCfg *eth.SystemConfig, logs []*types.Log, cfg *rollup.Config, blockNumber uint64, l1Time uint64) error {
+	var result error
+	for j, lg := range logs {
+		if lg.BlockNumber != blockNumber {
+			continue
+		}
+		if err := ProcessSystemConfigUpdateLogEvent(sysCfg, lg, cfg, l1Time); err != nil {
+			result = multierror.Append(result, fmt.Errorf("malformatted L1 system sysCfg log at block %d, log %d: %w", blockNumber, j, err))
+		}
+	}
+	return result
+}
+
 // ProcessSystemConfigUpdateLogEvent decodes an EVM log entry emitted by the system config contract and applies it as a system config change.
 //
 // parse log data for:

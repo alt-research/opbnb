@@ -203,3 +203,19 @@ func TestProcessSystemConfigUpdateLogEvent(t *testing.T) {
 		})
 	}
 }
+
+func TestUpdateSystemConfigWithL1Logs_NoLogs(t *testing.T) {
+	cfg := &rollup.Config{L1SystemConfigAddress: common.Address{0x42}}
+	sysCfg := eth.SystemConfig{}
+	err := UpdateSystemConfigWithL1Logs(&sysCfg, nil, cfg, 100, 0)
+	require.NoError(t, err)
+}
+
+func TestUpdateSystemConfigWithL1Logs_WrongBlock(t *testing.T) {
+	cfg := &rollup.Config{L1SystemConfigAddress: common.Address{0x42}}
+	sysCfg := eth.SystemConfig{}
+	// log is for block 99, not 100 — should be ignored
+	lg := &types.Log{BlockNumber: 99, Address: cfg.L1SystemConfigAddress}
+	err := UpdateSystemConfigWithL1Logs(&sysCfg, []*types.Log{lg}, cfg, 100, 0)
+	require.NoError(t, err)
+}
