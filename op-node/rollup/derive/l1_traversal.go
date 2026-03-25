@@ -49,6 +49,11 @@ type L1Traversal struct {
 var _ ResettableStage = (*L1Traversal)(nil)
 
 func NewL1Traversal(log log.Logger, cfg *rollup.Config, l1Blocks L1BlockRefByNumberFetcher, tCfg L1TraversalConfig) *L1Traversal {
+	if tCfg.SyscfgLogRange > 0 {
+		log.Info("L1Traversal using eth_getLogs range mode for system config updates", "syscfg_log_range", tCfg.SyscfgLogRange)
+	} else {
+		log.Info("L1Traversal using per-block receipt fetch for system config updates (eth_getLogs disabled)")
+	}
 	return &L1Traversal{
 		log:            log,
 		l1Blocks:       l1Blocks,
@@ -91,6 +96,7 @@ func (l1t *L1Traversal) AdvanceL1Block(ctx context.Context) error {
 	if l1t.tCfg.SyscfgLogRange > 0 {
 		if nextL1Origin.Number >= l1t.nextLogFetch {
 			toBlock := nextL1Origin.Number + l1t.tCfg.SyscfgLogRange - 1
+			l1t.log.Debug("fetching system config logs via eth_getLogs range", "from", nextL1Origin.Number, "to", toBlock)
 			fetchedLogs, err := l1t.l1Blocks.FetchSystemConfigLogs(ctx, nextL1Origin.Number, toBlock,
 				l1t.cfg.L1SystemConfigAddress, ConfigUpdateEventABIHash)
 			if err != nil {
