@@ -96,7 +96,7 @@ func (l1t *L1Traversal) AdvanceL1Block(ctx context.Context) error {
 	if l1t.tCfg.SyscfgLogRange > 0 {
 		if nextL1Origin.Number >= l1t.nextLogFetch {
 			toBlock := nextL1Origin.Number + l1t.tCfg.SyscfgLogRange - 1
-			l1t.log.Debug("fetching system config logs via eth_getLogs range", "from", nextL1Origin.Number, "to", toBlock)
+			l1t.log.Info("fetching system config logs via eth_getLogs range", "from", nextL1Origin.Number, "to", toBlock)
 			fetchedLogs, err := l1t.l1Blocks.FetchSystemConfigLogs(ctx, nextL1Origin.Number, toBlock,
 				l1t.cfg.L1SystemConfigAddress, ConfigUpdateEventABIHash)
 			if err != nil {
