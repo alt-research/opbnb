@@ -167,7 +167,7 @@ var (
 		Name:     "l1.max-concurrency",
 		Usage:    "Maximum number of concurrent RPC requests to make to the L1 RPC provider.",
 		EnvVars:  prefixEnvVars("L1_MAX_CONCURRENCY"),
-		Value:    10,
+		Value:    20,
 		Category: L1RPCCategory,
 	}
 	L1RPCRateLimit = &cli.Float64Flag{
@@ -376,6 +376,18 @@ var (
 		Value:   false,
 		Hidden:  true,
 	}
+	L1SyscfgLogRange = &cli.Uint64Flag{
+		Name:    "l1.syscfg-log-range",
+		Usage:   "Number of L1 blocks per eth_getLogs batch when scanning for system config updates. Set to 0 to disable and use per-block receipt fetching.",
+		EnvVars: prefixEnvVars("L1_SYSCFG_LOG_RANGE"),
+		Value:   1000,
+	}
+	L1WalkbackPrefetchBatch = &cli.IntFlag{
+		Name:    "l1.walkback-prefetch-batch",
+		Usage:   "Batch size for L1 block ref pre-fetch during FindL2Heads walk-back.",
+		EnvVars: prefixEnvVars("L1_WALKBACK_PREFETCH_BATCH"),
+		Value:   20,
+	}
 	BetaExtraNetworks = &cli.BoolFlag{
 		Name:    "beta.extra-networks",
 		Usage:   "Legacy flag, ignored, all superchain-registry networks are enabled by default.",
@@ -448,6 +460,8 @@ var optionalFlags = []cli.Flag{
 	L1RPCMaxBatchSize,
 	L1RPCMaxCacheSize,
 	L1RPCMaxConcurrency,
+	L1SyscfgLogRange,
+	L1WalkbackPrefetchBatch,
 	L1HTTPPollInterval,
 	L1ArchiveBlobRpcAddr,
 	L1BlobRpcRateLimit,
