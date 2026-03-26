@@ -90,6 +90,9 @@ func (los *L1OriginSelector) FindL1Origin(ctx context.Context, l2Head eth.L2Bloc
 	if err != nil {
 		receiptsCached = false
 		log.Warn("Fetch receipts cache missed when sequencer building block")
+		// Jump the pre-fetch goroutine forward to the sequencer's current L1 origin
+		// so it catches up instead of lagging behind at bq's origin.
+		_ = los.l1.GoOrUpdatePreFetchReceipts(ctx, nextOrigin.Number)
 	}
 
 	// If the next L2 block time is greater than the next origin block's time, we can choose to
