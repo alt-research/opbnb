@@ -85,14 +85,20 @@ func (los *L1OriginSelector) FindL1Origin(ctx context.Context, l2Head eth.L2Bloc
 
 	receiptsCached := true
 	receiptsCtx, receiptsCancel := context.WithTimeout(ctx, 10*time.Millisecond)
-	defer receiptsCancel()
 	_, _, err = los.l1.FetchReceipts(receiptsCtx, nextOrigin.Hash)
+	receiptsCancel()
 	if err != nil {
 		receiptsCached = false
 		log.Warn("Fetch receipts cache missed when sequencer building block")
-		// Jump the pre-fetch goroutine forward to the sequencer's current L1 origin
-		// so it catches up instead of lagging behind at bq's origin.
+		// Jump the pre-fetch goroutine forward to the sequencer's current L1 origin.
 		_ = los.l1.GoOrUpdatePreFetchReceipts(ctx, nextOrigin.Number)
+		// Synchronously pre-fetch nextOrigin receipts into cache so the next
+		// FindL1Origin call (250ms later) can advance without another miss.
+		prefetchCtx, prefetchCancel := context.WithTimeout(ctx, 200*time.Millisecond)
+		if ok, fetchErr := los.l1.PreFetchReceipts(prefetchCtx, nextOrigin.Hash); fetchErr == nil && ok {
+			receiptsCached = true
+		}
+		prefetchCancel()
 	}
 
 	// If the next L2 block time is greater than the next origin block's time, we can choose to
