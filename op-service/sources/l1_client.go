@@ -71,6 +71,9 @@ type L1Client struct {
 	//start block for pre-fetch receipts
 	preFetchReceiptsStartBlockChan chan uint64
 	preFetchReceiptsClosedChan     chan struct{}
+	// highest block number ever sent to preFetchReceiptsStartBlockChan;
+	// prevents engine_queue's lower-numbered calls from pulling the prefetcher backwards.
+	preFetchHighWaterMark atomic.Uint64
 
 	//max concurrent requests
 	maxConcurrentRequests int
@@ -145,18 +148,27 @@ func (s *L1Client) L1BlockRefByHash(ctx context.Context, hash common.Hash) (eth.
 }
 
 func (s *L1Client) GoOrUpdatePreFetchReceipts(ctx context.Context, l1Start uint64) error {
-	// Non-blocking: keep the highest requested start block in the channel.
-	// Drain any stale value first, then send the max of old and new.
-	select {
-	case old := <-s.preFetchReceiptsStartBlockChan:
-		if l1Start > old {
-			s.preFetchReceiptsStartBlockChan <- l1Start
-		} else {
-			s.preFetchReceiptsStartBlockChan <- old
+	// Only advance the prefetcher; never let a lower-numbered caller (e.g. engine_queue
+	// passing bq's origin) pull it backwards and clear the cache.
+	for {
+		old := s.preFetchHighWaterMark.Load()
+		if l1Start <= old {
+			// Already at or ahead of this request — nothing to do.
+			s.preFetchReceiptsOnce.Do(func() {}) // ensure goroutine starts on first call
+			return nil
 		}
-	default:
-		s.preFetchReceiptsStartBlockChan <- l1Start
+		if s.preFetchHighWaterMark.CompareAndSwap(old, l1Start) {
+			break
+		}
 	}
+	// Non-blocking: keep the highest requested start block in the channel.
+	// Drain any stale value first, then send the new (higher) value.
+	select {
+	case <-s.preFetchReceiptsStartBlockChan:
+		// discard stale lower value
+	default:
+	}
+	s.preFetchReceiptsStartBlockChan <- l1Start
 	s.preFetchReceiptsOnce.Do(func() {
 		s.log.Info("pre-fetching receipts start", "startBlock", l1Start)
 		s.isPreFetchReceiptsRunning.Store(true)
