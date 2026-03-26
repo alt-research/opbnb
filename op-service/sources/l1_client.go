@@ -142,7 +142,18 @@ func (s *L1Client) L1BlockRefByHash(ctx context.Context, hash common.Hash) (eth.
 }
 
 func (s *L1Client) GoOrUpdatePreFetchReceipts(ctx context.Context, l1Start uint64) error {
-	s.preFetchReceiptsStartBlockChan <- l1Start
+	// Non-blocking: keep the highest requested start block in the channel.
+	// Drain any stale value first, then send the max of old and new.
+	select {
+	case old := <-s.preFetchReceiptsStartBlockChan:
+		if l1Start > old {
+			s.preFetchReceiptsStartBlockChan <- l1Start
+		} else {
+			s.preFetchReceiptsStartBlockChan <- old
+		}
+	default:
+		s.preFetchReceiptsStartBlockChan <- l1Start
+	}
 	s.preFetchReceiptsOnce.Do(func() {
 		s.log.Info("pre-fetching receipts start", "startBlock", l1Start)
 		s.isPreFetchReceiptsRunning.Store(true)
@@ -155,10 +166,18 @@ func (s *L1Client) GoOrUpdatePreFetchReceipts(ctx context.Context, l1Start uint6
 					s.log.Info("pre-fetching receipts done")
 					s.preFetchReceiptsClosedChan <- struct{}{}
 					return
-				case currentL1Block = <-s.preFetchReceiptsStartBlockChan:
-					s.log.Debug("pre-fetching receipts currentL1Block changed", "block", currentL1Block)
-					s.recProvider.GetReceiptsCache().RemoveAll()
-					parentHash = common.Hash{}
+				case newStart := <-s.preFetchReceiptsStartBlockChan:
+					if newStart < currentL1Block {
+						// Backward jump: reorg or reset — clear cache and restart.
+						s.log.Debug("pre-fetching receipts reset backwards", "from", currentL1Block, "to", newStart)
+						s.recProvider.GetReceiptsCache().RemoveAll()
+						parentHash = common.Hash{}
+						currentL1Block = newStart
+					} else if newStart > currentL1Block {
+						// Forward jump: advance without clearing cache.
+						s.log.Debug("pre-fetching receipts jumped forward", "from", currentL1Block, "to", newStart)
+						currentL1Block = newStart
+					}
 				default:
 					blockRef, err := s.L1BlockRefByLabel(ctx, eth.Unsafe)
 					if err != nil {
