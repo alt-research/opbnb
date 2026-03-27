@@ -136,7 +136,6 @@ func (s *L1Client) L1BlockRefByLabel(ctx context.Context, label eth.BlockLabel) 
 func (s *L1Client) L1BlockRefByNumber(ctx context.Context, num uint64) (eth.L1BlockRef, error) {
 	if v, ok := s.blockRefByNumberCache.Load(num); ok {
 		ref := v.(eth.L1BlockRef)
-		s.log.Debug("L1BlockRefByNumber cache hit", "number", num)
 		// Trigger next batch prefetch window.
 		select {
 		case s.blockRefPrefetchChan <- num + 1:
@@ -184,7 +183,6 @@ func (s *L1Client) startBlockRefPrefetcher(ctx context.Context) {
 				if _, ok := s.blockRefByNumberCache.Load(startNum); ok {
 					continue
 				}
-				s.log.Debug("blockref batch prefetch start", "start", startNum, "count", batchSize)
 				headers := make([]*RPCHeader, batchSize)
 				elems := make([]rpc.BatchElem, batchSize)
 				for i := 0; i < batchSize; i++ {
@@ -212,7 +210,7 @@ func (s *L1Client) startBlockRefPrefetcher(ctx context.Context) {
 					s.l1BlockRefsCache.Add(ref.Hash, ref)
 					cached++
 				}
-				s.log.Debug("blockref batch prefetch done", "start", startNum, "cached", cached)
+				s.log.Info("blockref batch prefetch done", "start", startNum, "cached", cached)
 			}
 		}
 	}()
