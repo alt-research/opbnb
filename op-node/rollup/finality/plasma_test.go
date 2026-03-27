@@ -127,7 +127,7 @@ func TestPlasmaFinalityData(t *testing.T) {
 				L1Origin:       previous.ID(), // reference previous origin, not the block the batch was included in
 				SequenceNumber: j,
 			}
-			l1F.ExpectClearReceiptsCacheBefore(l2parent.L1Origin.Number)
+			l1F.ExpectClearReceiptsCacheBefore(l1parent.Number)
 			fi.PostProcessSafeL2(l2parent, l1parent)
 		}
 		require.NoError(t, fi.OnDerivationL1End(context.Background(), l1parent))

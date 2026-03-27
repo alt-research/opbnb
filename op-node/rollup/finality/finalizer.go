@@ -224,7 +224,14 @@ func (fi *Finalizer) PostProcessSafeL2(l2Safe eth.L2BlockRef, derivedFrom eth.L1
 			fi.log.Debug("updated finality-data", "last_l1", last.L1Block, "last_l2", last.L2Block)
 		}
 	}
-	fi.l1Fetcher.ClearReceiptsCacheBefore(l2Safe.L1Origin.Number)
+	// Use derivedFrom.Number (pipeline's current L1 origin) rather than
+	// l2Safe.L1Origin.Number (safe head's L1 origin). During catch-up the safe
+	// head's L1 origin is near the tip while the pipeline is far behind, so
+	// clearing before l2Safe.L1Origin would evict all prefetched receipts that
+	// bq still needs.
+	fi.log.Debug("clearing receipts cache", "before", derivedFrom.Number,
+		"l2_safe", l2Safe.ID(), "l2_safe_l1_origin", l2Safe.L1Origin, "derived_from", derivedFrom.ID())
+	fi.l1Fetcher.ClearReceiptsCacheBefore(derivedFrom.Number)
 }
 
 // Reset clears the recent history of safe-L2 blocks used for finalization,
