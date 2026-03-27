@@ -379,8 +379,13 @@ func (s *L1Client) GoOrUpdatePreFetchReceipts(ctx context.Context, l1Start uint6
 }
 
 func (s *L1Client) ClearReceiptsCacheBefore(blockNumber uint64) {
-	s.log.Debug("clear receipts cache before", "blockNumber", blockNumber)
 	s.recProvider.GetReceiptsCache().RemoveLessThan(blockNumber)
+	// Notify the prefetcher so it knows to start filling from blockNumber onward.
+	// Without this, the prefetcher may be mid-batch on older blocks while the
+	// pipeline has already advanced, causing cache misses.
+	if s.isPreFetchReceiptsRunning.Load() {
+		_ = s.GoOrUpdatePreFetchReceipts(context.Background(), blockNumber)
+	}
 }
 
 func (s *L1Client) Close() {

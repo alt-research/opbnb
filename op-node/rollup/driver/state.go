@@ -437,7 +437,7 @@ func (s *Driver) eventLoop() {
 				// event (new L1 head signal) to advance — that idle wait is ~60ms
 				// per L1 block and is the main bottleneck during node recovery.
 				if origin := s.derivation.Origin(); origin.Number < s.l1State.L1Head().Number {
-					s.log.Debug("Derivation process went idle but catching up, re-scheduling step",
+					s.log.Info("Derivation process went idle but catching up, re-scheduling step",
 						"progress", origin, "l1_head", s.l1State.L1Head())
 					reqStep()
 					continue
