@@ -214,7 +214,7 @@ func (s *L1Client) startBlockRefPrefetcher(ctx context.Context) {
 					s.transactionsCache.Add(ref.Hash, txs)
 					cached++
 				}
-				s.log.Debug("blockref batch prefetch done", "start", startNum, "cached", cached)
+				s.log.Info("blockref batch prefetch done", "start", startNum, "cached", cached)
 			}
 		}
 	}()

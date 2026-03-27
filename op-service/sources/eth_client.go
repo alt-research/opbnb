@@ -299,10 +299,14 @@ func (s *EthClient) InfoAndTxsByHash(ctx context.Context, hash common.Hash) (eth
 func (s *EthClient) infoAndTxsByHash(ctx context.Context, hash common.Hash, recordMetrics bool) (eth.BlockInfo, types.Transactions, error) {
 	if header, ok := s.headersCache.GetOrPeek(hash, s.isReadOrderly, recordMetrics); ok {
 		if txs, ok := s.transactionsCache.GetOrPeek(hash, s.isReadOrderly, recordMetrics); ok {
+			s.log.Info("InfoAndTxsByHash cache hit", "hash", hash)
 			return header, txs, nil
 		}
 	}
-	return s.blockCall(ctx, "eth_getBlockByHash", hashID(hash))
+	t0 := time.Now()
+	info, txs, err := s.blockCall(ctx, "eth_getBlockByHash", hashID(hash))
+	s.log.Info("InfoAndTxsByHash cache miss, fetched via RPC", "hash", hash, "dur", time.Since(t0), "err", err)
+	return info, txs, err
 }
 
 func (s *EthClient) InfoAndTxsByNumber(ctx context.Context, number uint64) (eth.BlockInfo, types.Transactions, error) {
