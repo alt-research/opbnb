@@ -280,11 +280,14 @@ func (s *L1Client) GoOrUpdatePreFetchReceipts(ctx context.Context, l1Start uint6
 					return
 				case newStart := <-s.preFetchReceiptsStartBlockChan:
 					if newStart < currentL1Block {
-						// Backward jump: reorg or reset — clear cache and restart.
-						s.log.Info("pre-fetching receipts reset backwards", "from", currentL1Block, "to", newStart)
-						s.recProvider.GetReceiptsCache().RemoveAll()
-						parentHash = common.Hash{}
-						currentL1Block = newStart
+						// preFetchHighWaterMark guarantees the channel only receives
+						// monotonically increasing values, so newStart < currentL1Block
+						// means the sequencer advanced the watermark by +1 while the
+						// prefetcher window already ran +40 ahead. This is not a reorg;
+						// ignore and keep fetching forward from currentL1Block.
+						// True reorgs are detected by AdvanceL1Block parent-hash check
+						// and handled via InvalidateBlockRefByNumberCache.
+						s.log.Info("pre-fetching receipts: newStart behind cursor, ignoring", "currentL1Block", currentL1Block, "newStart", newStart)
 					} else if newStart > currentL1Block {
 						// Forward jump: advance without clearing cache.
 						s.log.Info("pre-fetching receipts jumped forward", "from", currentL1Block, "to", newStart)
