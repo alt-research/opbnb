@@ -180,6 +180,10 @@ func (eq *AttributesHandler) forceNextSafeAttributes(ctx context.Context, attrib
 			// block is somehow invalid, there is nothing we can do to recover & we should exit.
 			if len(attrs.Transactions) == depositCount {
 				eq.log.Error("deposit only block was invalid", "parent", attributes.Parent, "err", err)
+				// If the engine reports a forkchoice inconsistency, a pipeline reset can resolve it.
+				if strings.Contains(err.Error(), "need reset to resolve") {
+					return derive.NewResetError(fmt.Errorf("failed to process deposit-only block, resetting to recover: %w", err))
+				}
 				return derive.NewCriticalError(fmt.Errorf("failed to process block with only deposit transactions: %w", err))
 			}
 			// Revert the pending safe head to the safe head.
