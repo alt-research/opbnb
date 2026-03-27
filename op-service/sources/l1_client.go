@@ -188,8 +188,10 @@ func (s *L1Client) startBlockRefPrefetcher(ctx context.Context) {
 				if v, ok := s.blockRefByNumberCache.Load(startNum); ok {
 					ref := v.(eth.L1BlockRef)
 					if _, txOk := s.transactionsCache.Get(ref.Hash); txOk {
+						s.log.Info("blockref batch prefetch skip, tx cache hit", "start", startNum)
 						continue
 					}
+					s.log.Info("blockref batch prefetch re-fetch, tx cache evicted", "start", startNum)
 				}
 				blocks := make([]*RPCBlock, batchSize)
 				elems := make([]rpc.BatchElem, batchSize)
@@ -392,7 +394,8 @@ func (s *L1Client) GoOrUpdatePreFetchReceipts(ctx context.Context, l1Start uint6
 						parentHash = common.Hash{}
 						continue
 					}
-					parentHash = latestBlockHash
+					s.log.Info("receipts prefetch window done", "from", oldestFetchBlockNumber, "to", currentL1Block-1, "l1_head", blockRef.Number)
+				parentHash = latestBlockHash
 				}
 			}
 		}()
