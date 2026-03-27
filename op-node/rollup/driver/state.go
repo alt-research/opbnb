@@ -430,9 +430,19 @@ func (s *Driver) eventLoop() {
 			err := s.syncStep(s.driverCtx)
 			stepAttempts += 1 // count as attempt by default. We reset to 0 if we are making healthy progress.
 			if err == io.EOF {
-				s.log.Debug("Derivation process went idle", "progress", s.derivation.Origin(), "err", err)
 				stepAttempts = 0
 				s.metrics.SetDerivationIdle(true)
+				// During catch-up the pipeline origin lags behind the L1 head.
+				// Immediately re-schedule a step so we don't wait for an external
+				// event (new L1 head signal) to advance — that idle wait is ~60ms
+				// per L1 block and is the main bottleneck during node recovery.
+				if origin := s.derivation.Origin(); origin.Number < s.l1State.L1Head().Number {
+					s.log.Debug("Derivation process went idle but catching up, re-scheduling step",
+						"progress", origin, "l1_head", s.l1State.L1Head())
+					reqStep()
+					continue
+				}
+				s.log.Debug("Derivation process went idle", "progress", s.derivation.Origin(), "err", err)
 				continue
 			} else if err != nil && errors.Is(err, derive.EngineELSyncing) {
 				s.log.Debug("Derivation process went idle because the engine is syncing", "progress", s.derivation.Origin(), "unsafe_head", s.engineController.UnsafeL2Head(), "err", err)
