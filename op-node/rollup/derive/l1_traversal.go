@@ -97,6 +97,8 @@ func (l1t *L1Traversal) AdvanceL1Block(ctx context.Context) error {
 	}
 	if fetchDur > 50*time.Millisecond {
 		l1t.log.Info("AdvanceL1Block receipts cache miss", "block", nextL1Origin.Number, "dur", fetchDur)
+	} else {
+		l1t.log.Info("AdvanceL1Block receipts cache hit", "block", nextL1Origin.Number, "dur", fetchDur)
 	}
 
 	// TODO: may need to pass l1origin milli-timestamp later if IsEcotone() use the milli-timestamp

@@ -268,13 +268,13 @@ func (s *L1Client) GoOrUpdatePreFetchReceipts(ctx context.Context, l1Start uint6
 				case newStart := <-s.preFetchReceiptsStartBlockChan:
 					if newStart < currentL1Block {
 						// Backward jump: reorg or reset — clear cache and restart.
-						s.log.Debug("pre-fetching receipts reset backwards", "from", currentL1Block, "to", newStart)
+						s.log.Info("pre-fetching receipts reset backwards", "from", currentL1Block, "to", newStart)
 						s.recProvider.GetReceiptsCache().RemoveAll()
 						parentHash = common.Hash{}
 						currentL1Block = newStart
 					} else if newStart > currentL1Block {
 						// Forward jump: advance without clearing cache.
-						s.log.Debug("pre-fetching receipts jumped forward", "from", currentL1Block, "to", newStart)
+						s.log.Info("pre-fetching receipts jumped forward", "from", currentL1Block, "to", newStart)
 						currentL1Block = newStart
 					}
 				default:
@@ -384,6 +384,7 @@ func (s *L1Client) ClearReceiptsCacheBefore(blockNumber uint64) {
 	// Without this, the prefetcher may be mid-batch on older blocks while the
 	// pipeline has already advanced, causing cache misses.
 	if s.isPreFetchReceiptsRunning.Load() {
+		s.log.Info("ClearReceiptsCacheBefore notifying prefetcher", "block", blockNumber)
 		_ = s.GoOrUpdatePreFetchReceipts(context.Background(), blockNumber)
 	}
 }
