@@ -229,7 +229,7 @@ func (fi *Finalizer) PostProcessSafeL2(l2Safe eth.L2BlockRef, derivedFrom eth.L1
 	// head's L1 origin is near the tip while the pipeline is far behind, so
 	// clearing before l2Safe.L1Origin would evict all prefetched receipts that
 	// bq still needs.
-	fi.log.Debug("clearing receipts cache", "before", derivedFrom.Number,
+	fi.log.Info("clearing receipts cache", "before", derivedFrom.Number,
 		"l2_safe", l2Safe.ID(), "l2_safe_l1_origin", l2Safe.L1Origin, "derived_from", derivedFrom.ID())
 	fi.l1Fetcher.ClearReceiptsCacheBefore(derivedFrom.Number)
 }
