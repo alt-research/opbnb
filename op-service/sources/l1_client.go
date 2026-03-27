@@ -10,7 +10,9 @@ import (
 
 	"github.com/ethereum/go-ethereum"
 	"github.com/ethereum/go-ethereum/common"
+	"github.com/ethereum/go-ethereum/common/hexutil"
 	"github.com/ethereum/go-ethereum/log"
+	"github.com/ethereum/go-ethereum/rpc"
 
 	"github.com/ethereum-optimism/optimism/op-node/rollup"
 	"github.com/ethereum-optimism/optimism/op-service/client"
@@ -72,6 +74,10 @@ type L1Client struct {
 	// prevents engine_queue's lower-numbered calls from pulling the prefetcher backwards.
 	preFetchHighWaterMark atomic.Uint64
 
+	// blockRefPrefetchChan triggers async batch prefetch of L1 block headers.
+	// Sending a block number N causes the goroutine to batch-fetch headers for [N, N+batchSize).
+	blockRefPrefetchChan chan uint64
+
 	//max concurrent requests
 	maxConcurrentRequests int
 	//done chan
@@ -85,15 +91,18 @@ func NewL1Client(client client.RPC, log log.Logger, metrics caching.Metrics, con
 		return nil, err
 	}
 
-	return &L1Client{
+	l1Client := &L1Client{
 		EthClient:                      ethClient,
 		l1BlockRefsCache:               caching.NewLRUCache[common.Hash, eth.L1BlockRef](metrics, "blockrefs", config.L1BlockRefsCacheSize),
 		preFetchReceiptsOnce:           sync.Once{},
 		preFetchReceiptsStartBlockChan: make(chan uint64, 1),
 		preFetchReceiptsClosedChan:     make(chan struct{}),
+		blockRefPrefetchChan:           make(chan uint64, 1),
 		maxConcurrentRequests:          config.MaxConcurrentRequests,
 		done:                           make(chan struct{}),
-	}, nil
+	}
+	l1Client.startBlockRefPrefetcher(context.Background())
+	return l1Client, nil
 }
 
 // L1BlockRefByLabel returns the [eth.L1BlockRef] for the given block label.
@@ -126,7 +135,51 @@ func (s *L1Client) L1BlockRefByNumber(ctx context.Context, num uint64) (eth.L1Bl
 	}
 	ref := eth.InfoToL1BlockRef(info)
 	s.l1BlockRefsCache.Add(ref.Hash, ref)
+	// Trigger async batch prefetch of subsequent headers so future AdvanceL1Block calls hit cache.
+	select {
+	case s.blockRefPrefetchChan <- num + 1:
+	default:
+	}
 	return ref, nil
+}
+
+// startBlockRefPrefetcher runs a goroutine that batch-fetches L1 block headers
+// into l1BlockRefsCache whenever triggered by blockRefPrefetchChan.
+func (s *L1Client) startBlockRefPrefetcher(ctx context.Context) {
+	const batchSize = 20
+	go func() {
+		for {
+			select {
+			case <-s.done:
+				return
+			case startNum := <-s.blockRefPrefetchChan:
+				headers := make([]*RPCHeader, batchSize)
+				elems := make([]rpc.BatchElem, batchSize)
+				for i := 0; i < batchSize; i++ {
+					elems[i] = rpc.BatchElem{
+						Method: "eth_getBlockByNumber",
+						Args:   []interface{}{hexutil.EncodeUint64(startNum + uint64(i)), false},
+						Result: &headers[i],
+					}
+				}
+				if err := s.client.BatchCallContext(ctx, elems); err != nil {
+					s.log.Debug("blockref batch prefetch failed", "start", startNum, "err", err)
+					continue
+				}
+				for i, elem := range elems {
+					if elem.Error != nil || headers[i] == nil {
+						continue
+					}
+					info, err := headers[i].Info(s.trustRPC, s.mustBePostMerge)
+					if err != nil {
+						continue
+					}
+					ref := eth.InfoToL1BlockRef(info)
+					s.l1BlockRefsCache.Add(ref.Hash, ref)
+				}
+			}
+		}
+	}()
 }
 
 // L1BlockRefByHash returns the [eth.L1BlockRef] for the given block hash.
@@ -297,8 +350,8 @@ func (s *L1Client) ClearReceiptsCacheBefore(blockNumber uint64) {
 }
 
 func (s *L1Client) Close() {
+	close(s.done)
 	if s.isPreFetchReceiptsRunning.Load() {
-		close(s.done)
 		<-s.preFetchReceiptsClosedChan
 	}
 	s.EthClient.Close()
