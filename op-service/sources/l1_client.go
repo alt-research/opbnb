@@ -324,12 +324,19 @@ func (s *L1Client) GoOrUpdatePreFetchReceipts(ctx context.Context, l1Start uint6
 									resultCh <- fetchResult{}
 									return
 								default:
-									blockInfo, err := s.L1BlockRefByNumber(ctx, blockNumber)
+									// Fetch full block (with txs) so transactionsCache is populated,
+									// avoiding a second eth_getBlockByHash RPC in fetchReceiptsInner.
+									info, txs, err := s.InfoAndTxsByNumber(ctx, blockNumber)
 									if err != nil {
-										s.log.Debug("failed to fetch block ref", "err", err, "blockNumber", blockNumber)
+										s.log.Debug("failed to fetch block info+txs", "err", err, "blockNumber", blockNumber)
 										time.Sleep(1 * time.Second)
 										continue
 									}
+									s.headersCache.Add(info.Hash(), info)
+									s.transactionsCache.Add(info.Hash(), txs)
+									blockInfo := eth.InfoToL1BlockRef(info)
+									s.blockRefByNumberCache.Store(blockInfo.Number, blockInfo)
+									s.l1BlockRefsCache.Add(blockInfo.Hash, blockInfo)
 									pair, ok := s.recProvider.GetReceiptsCache().Get(blockNumber, false)
 									if ok && pair.blockHash == blockInfo.Hash {
 										resultCh <- fetchResult{ref: blockInfo}
