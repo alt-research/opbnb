@@ -186,7 +186,9 @@ func (s *L1Client) startBlockRefPrefetcher(ctx context.Context) {
 				}
 				// Ignore large forward jumps (likely from sequencer's L1BlockRefByNumber,
 				// which is far ahead of bq's current position during catch-up).
-				if lastPrefetch > 0 && startNum > lastPrefetch+uint64(batchSize*10) {
+				// A jump larger than 1M blocks is treated as a position reset (e.g. after restart).
+				const resetThreshold = 1_000_000
+				if lastPrefetch > 0 && startNum > lastPrefetch+uint64(batchSize*10) && startNum < lastPrefetch+resetThreshold {
 					s.log.Info("blockref batch prefetch skip large jump", "last", lastPrefetch, "requested", startNum)
 					continue
 				}
