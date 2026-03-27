@@ -77,6 +77,10 @@ type L1Client struct {
 	// blockRefPrefetchChan triggers async batch prefetch of L1 block headers.
 	// Sending a block number N causes the goroutine to batch-fetch headers for [N, N+batchSize).
 	blockRefPrefetchChan chan uint64
+	// blockRefByNumberCache caches L1BlockRef by block number for catch-up acceleration.
+	// Entries are invalidated on reorg (detected by AdvanceL1Block's parent-hash check).
+	// uint64 -> eth.L1BlockRef
+	blockRefByNumberCache sync.Map
 
 	//max concurrent requests
 	maxConcurrentRequests int
@@ -128,7 +132,18 @@ func (s *L1Client) L1BlockRefByLabel(ctx context.Context, label eth.BlockLabel) 
 
 // L1BlockRefByNumber returns an [eth.L1BlockRef] for the given block number.
 // Notice, we cannot cache a block reference by number because L1 re-orgs can invalidate the cached block reference.
+// However, during catch-up we pre-populate blockRefByNumberCache via batch RPC; hits avoid individual round-trips.
 func (s *L1Client) L1BlockRefByNumber(ctx context.Context, num uint64) (eth.L1BlockRef, error) {
+	if v, ok := s.blockRefByNumberCache.Load(num); ok {
+		ref := v.(eth.L1BlockRef)
+		s.log.Debug("L1BlockRefByNumber cache hit", "number", num)
+		// Trigger next batch prefetch window.
+		select {
+		case s.blockRefPrefetchChan <- num + 1:
+		default:
+		}
+		return ref, nil
+	}
 	info, err := s.InfoByNumber(ctx, num)
 	if err != nil {
 		return eth.L1BlockRef{}, fmt.Errorf("failed to fetch header by num %d: %w", num, err)
@@ -143,8 +158,20 @@ func (s *L1Client) L1BlockRefByNumber(ctx context.Context, num uint64) (eth.L1Bl
 	return ref, nil
 }
 
+// InvalidateBlockRefByNumberCache removes entries >= fromNumber from blockRefByNumberCache.
+// Must be called on L1 reorg to prevent stale number-keyed entries from being served.
+func (s *L1Client) InvalidateBlockRefByNumberCache(fromNumber uint64) {
+	s.log.Info("invalidating blockRefByNumber cache on reorg", "fromNumber", fromNumber)
+	s.blockRefByNumberCache.Range(func(k, _ any) bool {
+		if k.(uint64) >= fromNumber {
+			s.blockRefByNumberCache.Delete(k)
+		}
+		return true
+	})
+}
+
 // startBlockRefPrefetcher runs a goroutine that batch-fetches L1 block headers
-// into l1BlockRefsCache whenever triggered by blockRefPrefetchChan.
+// into blockRefByNumberCache whenever triggered by blockRefPrefetchChan.
 func (s *L1Client) startBlockRefPrefetcher(ctx context.Context) {
 	const batchSize = 20
 	go func() {
@@ -153,6 +180,11 @@ func (s *L1Client) startBlockRefPrefetcher(ctx context.Context) {
 			case <-s.done:
 				return
 			case startNum := <-s.blockRefPrefetchChan:
+				// Skip if already cached.
+				if _, ok := s.blockRefByNumberCache.Load(startNum); ok {
+					continue
+				}
+				s.log.Debug("blockref batch prefetch start", "start", startNum, "count", batchSize)
 				headers := make([]*RPCHeader, batchSize)
 				elems := make([]rpc.BatchElem, batchSize)
 				for i := 0; i < batchSize; i++ {
@@ -163,9 +195,10 @@ func (s *L1Client) startBlockRefPrefetcher(ctx context.Context) {
 					}
 				}
 				if err := s.client.BatchCallContext(ctx, elems); err != nil {
-					s.log.Debug("blockref batch prefetch failed", "start", startNum, "err", err)
+					s.log.Warn("blockref batch prefetch failed", "start", startNum, "err", err)
 					continue
 				}
+				cached := 0
 				for i, elem := range elems {
 					if elem.Error != nil || headers[i] == nil {
 						continue
@@ -175,8 +208,11 @@ func (s *L1Client) startBlockRefPrefetcher(ctx context.Context) {
 						continue
 					}
 					ref := eth.InfoToL1BlockRef(info)
+					s.blockRefByNumberCache.Store(ref.Number, ref)
 					s.l1BlockRefsCache.Add(ref.Hash, ref)
+					cached++
 				}
+				s.log.Debug("blockref batch prefetch done", "start", startNum, "cached", cached)
 			}
 		}
 	}()

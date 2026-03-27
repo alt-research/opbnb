@@ -23,6 +23,12 @@ type L1BlockRefByNumberFetcher interface {
 	PreFetchReceipts(ctx context.Context, blockHash common.Hash) (bool, error)
 }
 
+// blockRefCacheInvalidator is an optional interface for L1 sources that cache
+// block refs by number. Implemented by L1Client during catch-up acceleration.
+type blockRefCacheInvalidator interface {
+	InvalidateBlockRefByNumberCache(fromNumber uint64)
+}
+
 type L1Traversal struct {
 	block    eth.L1BlockRef
 	done     bool
@@ -68,6 +74,9 @@ func (l1t *L1Traversal) AdvanceL1Block(ctx context.Context) error {
 		return NewTemporaryError(fmt.Errorf("failed to find L1 block info by number, at origin %s next %d: %w", origin, origin.Number+1, err))
 	}
 	if l1t.block.Hash != nextL1Origin.ParentHash {
+		if inv, ok := l1t.l1Blocks.(blockRefCacheInvalidator); ok {
+			inv.InvalidateBlockRefByNumberCache(nextL1Origin.Number)
+		}
 		return NewResetError(fmt.Errorf("detected L1 reorg from %s to %s with conflicting parent %s", l1t.block, nextL1Origin, nextL1Origin.ParentID()))
 	}
 
