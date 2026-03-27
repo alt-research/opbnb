@@ -123,7 +123,11 @@ func (eq *AttributesHandler) consolidateNextSafeAttributes(ctx context.Context, 
 	ctx, cancel := context.WithTimeout(ctx, time.Second*10)
 	defer cancel()
 
+	t0 := time.Now()
 	envelope, err := eq.l2.PayloadByNumber(ctx, eq.ec.PendingSafeL2Head().Number+1)
+	if dur := time.Since(t0); dur > 50*time.Millisecond {
+		eq.log.Info("consolidate PayloadByNumber slow", "num", eq.ec.PendingSafeL2Head().Number+1, "dur", dur)
+	}
 	if err != nil {
 		if errors.Is(err, ethereum.NotFound) {
 			// engine may have restarted, or inconsistent safe head. We need to reset
@@ -151,9 +155,17 @@ func (eq *AttributesHandler) consolidateNextSafeAttributes(ctx context.Context, 
 // forceNextSafeAttributes inserts the provided attributes, reorging away any conflicting unsafe chain.
 func (eq *AttributesHandler) forceNextSafeAttributes(ctx context.Context, attributes *derive.AttributesWithParent) error {
 	attrs := attributes.Attributes
+	t0 := time.Now()
 	errType, err := eq.ec.StartPayload(ctx, eq.ec.PendingSafeL2Head(), attributes, true)
+	if dur := time.Since(t0); dur > 50*time.Millisecond {
+		eq.log.Info("forceNextSafeAttributes StartPayload slow", "dur", dur, "pending_safe", eq.ec.PendingSafeL2Head())
+	}
 	if err == nil {
+		t1 := time.Now()
 		_, errType, err = eq.ec.ConfirmPayload(ctx, async.NoOpGossiper{}, &conductor.NoOpConductor{})
+		if dur := time.Since(t1); dur > 50*time.Millisecond {
+			eq.log.Info("forceNextSafeAttributes ConfirmPayload slow", "dur", dur, "pending_safe", eq.ec.PendingSafeL2Head())
+		}
 	}
 	if err != nil {
 		switch errType {

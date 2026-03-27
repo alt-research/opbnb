@@ -141,7 +141,12 @@ func (dp *DerivationPipeline) Step(ctx context.Context) error {
 	}
 
 	// Now step the engine queue. It will pull earlier data as needed.
-	if err := dp.eng.Step(ctx); err == io.EOF {
+	t0 := time.Now()
+	err := dp.eng.Step(ctx)
+	if dur := time.Since(t0); dur > 50*time.Millisecond {
+		dp.log.Info("engine step slow", "dur", dur, "err", err, "origin", dp.Origin())
+	}
+	if err == io.EOF {
 		// If every stage has returned io.EOF, try to advance the L1 Origin
 		return dp.traversal.AdvanceL1Block(ctx)
 	} else if errors.Is(err, EngineELSyncing) {
