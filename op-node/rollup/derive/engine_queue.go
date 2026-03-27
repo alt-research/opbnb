@@ -313,7 +313,13 @@ func (eq *EngineQueue) Reset(ctx context.Context, _ eth.L1BlockRef, _ eth.System
 	if err != nil {
 		return NewTemporaryError(fmt.Errorf("failed to fetch L1 config of L2 block %s: %w", pipelineL2.ID(), err))
 	}
-	err2 := eq.l1Fetcher.GoOrUpdatePreFetchReceipts(context.Background(), pipelineOrigin.Number)
+	// Start receipts pre-fetch from finalized L2's L1 origin, not the pipeline's
+	// channel-timeout walk-back position (which can be near genesis on first start).
+	prefetchStart := finalized.L1Origin.Number
+	if prefetchStart < pipelineOrigin.Number {
+		prefetchStart = pipelineOrigin.Number
+	}
+	err2 := eq.l1Fetcher.GoOrUpdatePreFetchReceipts(context.Background(), prefetchStart)
 	if err2 != nil {
 		return NewTemporaryError(fmt.Errorf("failed to run pre fetch L1 receipts for L1 start block %s: %w", pipelineOrigin.ID(), err2))
 	}
