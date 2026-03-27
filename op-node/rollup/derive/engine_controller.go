@@ -279,7 +279,11 @@ func (e *EngineController) ConfirmPayload(ctx context.Context, agossip async.Asy
 		envelope, errTyp, err = confirmPayload(ctx, e.log, e.engine, fc, e.buildingInfo, updateSafe, agossip, sequencerConductor, e.metrics)
 	}
 	if err != nil {
-		return nil, errTyp, fmt.Errorf("failed to complete building on top of L2 chain %s, id: %s, error (%d): %w", e.buildingOnto, e.buildingInfo.ID, errTyp, err)
+		// Clear building state so the sequencer is not permanently blocked by buildingSafe=true.
+		// The derivation pipeline will retry StartPayload on the next step.
+		buildingOnto, buildingID := e.buildingOnto, e.buildingInfo.ID
+		e.resetBuildingState()
+		return nil, errTyp, fmt.Errorf("failed to complete building on top of L2 chain %s, id: %s, error (%d): %w", buildingOnto, buildingID, errTyp, err)
 	}
 	ref, err := PayloadToBlockRef(e.rollupCfg, envelope.ExecutionPayload)
 	if err != nil {
