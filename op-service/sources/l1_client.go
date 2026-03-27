@@ -169,8 +169,10 @@ func (s *L1Client) InvalidateBlockRefByNumberCache(fromNumber uint64) {
 	})
 }
 
-// startBlockRefPrefetcher runs a goroutine that batch-fetches L1 block headers
-// into blockRefByNumberCache whenever triggered by blockRefPrefetchChan.
+// startBlockRefPrefetcher runs a goroutine that batch-fetches L1 full blocks
+// into blockRefByNumberCache, headersCache, and transactionsCache whenever
+// triggered by blockRefPrefetchChan. Fetching full blocks (with txs) avoids
+// the per-block eth_getBlockByHash RPC call in InfoAndTxsByHash during derivation.
 func (s *L1Client) startBlockRefPrefetcher(ctx context.Context) {
 	const batchSize = 20
 	go func() {
@@ -183,13 +185,13 @@ func (s *L1Client) startBlockRefPrefetcher(ctx context.Context) {
 				if _, ok := s.blockRefByNumberCache.Load(startNum); ok {
 					continue
 				}
-				headers := make([]*RPCHeader, batchSize)
+				blocks := make([]*RPCBlock, batchSize)
 				elems := make([]rpc.BatchElem, batchSize)
 				for i := 0; i < batchSize; i++ {
 					elems[i] = rpc.BatchElem{
 						Method: "eth_getBlockByNumber",
-						Args:   []interface{}{hexutil.EncodeUint64(startNum + uint64(i)), false},
-						Result: &headers[i],
+						Args:   []interface{}{hexutil.EncodeUint64(startNum + uint64(i)), true},
+						Result: &blocks[i],
 					}
 				}
 				if err := s.client.BatchCallContext(ctx, elems); err != nil {
@@ -198,16 +200,18 @@ func (s *L1Client) startBlockRefPrefetcher(ctx context.Context) {
 				}
 				cached := 0
 				for i, elem := range elems {
-					if elem.Error != nil || headers[i] == nil {
+					if elem.Error != nil || blocks[i] == nil {
 						continue
 					}
-					info, err := headers[i].Info(s.trustRPC, s.mustBePostMerge)
+					info, txs, err := blocks[i].Info(s.trustRPC, s.mustBePostMerge)
 					if err != nil {
 						continue
 					}
 					ref := eth.InfoToL1BlockRef(info)
 					s.blockRefByNumberCache.Store(ref.Number, ref)
 					s.l1BlockRefsCache.Add(ref.Hash, ref)
+					s.headersCache.Add(ref.Hash, info)
+					s.transactionsCache.Add(ref.Hash, txs)
 					cached++
 				}
 				s.log.Debug("blockref batch prefetch done", "start", startNum, "cached", cached)
