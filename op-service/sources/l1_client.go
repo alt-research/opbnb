@@ -174,6 +174,7 @@ func (s *L1Client) InvalidateBlockRefByNumberCache(fromNumber uint64) {
 func (s *L1Client) startBlockRefPrefetcher(ctx context.Context) {
 	const batchSize = 20
 	go func() {
+		var lastPrefetch uint64
 		for {
 			select {
 			case <-s.done:
@@ -183,6 +184,13 @@ func (s *L1Client) startBlockRefPrefetcher(ctx context.Context) {
 				if _, ok := s.blockRefByNumberCache.Load(startNum); ok {
 					continue
 				}
+				// Ignore large forward jumps (likely from sequencer's L1BlockRefByNumber,
+				// which is far ahead of bq's current position during catch-up).
+				if lastPrefetch > 0 && startNum > lastPrefetch+uint64(batchSize*10) {
+					s.log.Debug("blockref batch prefetch skip large jump", "last", lastPrefetch, "requested", startNum)
+					continue
+				}
+				lastPrefetch = startNum
 				headers := make([]*RPCHeader, batchSize)
 				elems := make([]rpc.BatchElem, batchSize)
 				for i := 0; i < batchSize; i++ {
