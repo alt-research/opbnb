@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"time"
 
 	"github.com/ethereum/go-ethereum"
 	"github.com/ethereum/go-ethereum/common"
@@ -88,9 +89,14 @@ func (l1t *L1Traversal) AdvanceL1Block(ctx context.Context) error {
 	}
 
 	// Parse L1 receipts of the given block and update the L1 system configuration
+	t0 := time.Now()
 	_, receipts, err := l1t.l1Blocks.FetchReceipts(ctx, nextL1Origin.Hash)
+	fetchDur := time.Since(t0)
 	if err != nil {
 		return NewTemporaryError(fmt.Errorf("failed to fetch receipts of L1 block %s (parent: %s) for L1 sysCfg update: %w", nextL1Origin, origin, err))
+	}
+	if fetchDur > 50*time.Millisecond {
+		l1t.log.Info("AdvanceL1Block receipts cache miss", "block", nextL1Origin.Number, "dur", fetchDur)
 	}
 
 	// TODO: may need to pass l1origin milli-timestamp later if IsEcotone() use the milli-timestamp
