@@ -181,9 +181,15 @@ func (s *L1Client) startBlockRefPrefetcher(ctx context.Context) {
 			case <-s.done:
 				return
 			case startNum := <-s.blockRefPrefetchChan:
-				// Skip if already cached.
-				if _, ok := s.blockRefByNumberCache.Load(startNum); ok {
-					continue
+				// Skip only if both blockRef and txs are already cached.
+				// blockRefByNumberCache may be populated by the receipts prefetcher,
+				// but transactionsCache (LRU) may have evicted the entry by the time
+				// derivation reaches this block. Re-fetch if txs are missing.
+				if v, ok := s.blockRefByNumberCache.Load(startNum); ok {
+					ref := v.(eth.L1BlockRef)
+					if _, txOk := s.transactionsCache.Get(ref.Hash); txOk {
+						continue
+					}
 				}
 				blocks := make([]*RPCBlock, batchSize)
 				elems := make([]rpc.BatchElem, batchSize)
