@@ -254,6 +254,7 @@ func (s *L1Client) GoOrUpdatePreFetchReceipts(ctx context.Context, l1Start uint6
 			return nil
 		}
 		if s.preFetchHighWaterMark.CompareAndSwap(old, l1Start) {
+			s.log.Info("GoOrUpdatePreFetchReceipts advancing watermark", "from", old, "to", l1Start)
 			break
 		}
 	}
