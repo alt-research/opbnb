@@ -291,25 +291,33 @@ func (s *L1Client) GoOrUpdatePreFetchReceipts(ctx context.Context, l1Start uint6
 						continue
 					}
 
-					var taskCount int
+					// Sliding-window prefetch: keep maxConcurrentRequests goroutines running
+					// at all times. Each goroutine signals completion immediately after fetching
+					// one block, so the next window starts without waiting for the slowest block
+					// (eliminates head-of-line blocking from the old wg.Wait batch approach).
 					maxConcurrent := s.maxConcurrentRequests
-					if blockRef.Number-currentL1Block >= uint64(maxConcurrent) {
-						taskCount = maxConcurrent
-					} else {
-						taskCount = int(blockRef.Number-currentL1Block) + 1
+					windowEnd := currentL1Block + uint64(maxConcurrent)
+					if windowEnd > blockRef.Number+1 {
+						windowEnd = blockRef.Number + 1
+					}
+					taskCount := int(windowEnd - currentL1Block)
+					if taskCount <= 0 {
+						time.Sleep(100 * time.Millisecond)
+						continue
 					}
 
-					blockInfoChan := make(chan eth.L1BlockRef, taskCount)
+					type fetchResult struct {
+						ref eth.L1BlockRef
+					}
+					resultCh := make(chan fetchResult, taskCount)
 					oldestFetchBlockNumber := currentL1Block
 
-					var wg sync.WaitGroup
 					for i := 0; i < taskCount; i++ {
-						wg.Add(1)
-						go func(ctx context.Context, blockNumber uint64) {
-							defer wg.Done()
+						go func(blockNumber uint64) {
 							for {
 								select {
 								case <-s.done:
+									resultCh <- fetchResult{}
 									return
 								default:
 									blockInfo, err := s.L1BlockRefByNumber(ctx, blockNumber)
@@ -320,10 +328,9 @@ func (s *L1Client) GoOrUpdatePreFetchReceipts(ctx context.Context, l1Start uint6
 									}
 									pair, ok := s.recProvider.GetReceiptsCache().Get(blockNumber, false)
 									if ok && pair.blockHash == blockInfo.Hash {
-										blockInfoChan <- blockInfo
+										resultCh <- fetchResult{ref: blockInfo}
 										return
 									}
-
 									isSuccess, err := s.PreFetchReceipts(ctx, blockInfo.Hash)
 									if err != nil {
 										s.log.Warn("failed to pre-fetch receipts", "err", err)
@@ -331,39 +338,37 @@ func (s *L1Client) GoOrUpdatePreFetchReceipts(ctx context.Context, l1Start uint6
 										continue
 									}
 									if !isSuccess {
-										s.log.Debug("The receipts cache may be full. "+
-											"please ensure the maximum height difference between the L1 blocks "+
-											"corresponding to the unsafe block height and the safe block height is less than or equal to the cache size.",
-											"blockHash", blockInfo.Hash, "blockNumber", blockNumber)
+										s.log.Debug("receipts cache full, retrying", "blockNumber", blockNumber)
 										time.Sleep(1 * time.Second)
 										continue
 									}
 									s.log.Debug("pre-fetching receipts done", "block", blockInfo.Number, "hash", blockInfo.Hash)
-									blockInfoChan <- blockInfo
+									resultCh <- fetchResult{ref: blockInfo}
 									return
 								}
 							}
-						}(ctx, currentL1Block)
-						currentL1Block = currentL1Block + 1
+						}(currentL1Block)
+						currentL1Block++
 					}
-					wg.Wait()
-					close(blockInfoChan)
 
-					//try to find out l1 reOrg and return to an earlier block height for re-prefetching
+					// Collect results and check for reorg.
 					var latestBlockHash common.Hash
 					latestBlockNumber := uint64(0)
 					var oldestBlockParentHash common.Hash
-					for l1BlockInfo := range blockInfoChan {
-						if l1BlockInfo.Number > latestBlockNumber {
-							latestBlockHash = l1BlockInfo.Hash
-							latestBlockNumber = l1BlockInfo.Number
+					for i := 0; i < taskCount; i++ {
+						r := <-resultCh
+						if r.ref.Number == 0 {
+							continue // done signal from closed goroutine
 						}
-						if l1BlockInfo.Number == oldestFetchBlockNumber {
-							oldestBlockParentHash = l1BlockInfo.ParentHash
+						if r.ref.Number > latestBlockNumber {
+							latestBlockHash = r.ref.Hash
+							latestBlockNumber = r.ref.Number
+						}
+						if r.ref.Number == oldestFetchBlockNumber {
+							oldestBlockParentHash = r.ref.ParentHash
 						}
 					}
 
-					s.log.Debug("pre-fetching receipts hash", "latestBlockHash", latestBlockHash, "latestBlockNumber", latestBlockNumber, "oldestBlockNumber", oldestFetchBlockNumber, "oldestBlockParentHash", oldestBlockParentHash)
 					if parentHash != (common.Hash{}) && oldestBlockParentHash != (common.Hash{}) && oldestBlockParentHash != parentHash && currentL1Block >= sequencerConfDepth+uint64(taskCount) {
 						currentL1Block = currentL1Block - sequencerConfDepth - uint64(taskCount)
 						s.log.Warn("pre-fetching receipts found l1 reOrg, return to an earlier block height for re-prefetching", "recordParentHash", parentHash, "unsafeParentHash", oldestBlockParentHash, "number", oldestFetchBlockNumber, "backToNumber", currentL1Block)
@@ -380,13 +385,6 @@ func (s *L1Client) GoOrUpdatePreFetchReceipts(ctx context.Context, l1Start uint6
 
 func (s *L1Client) ClearReceiptsCacheBefore(blockNumber uint64) {
 	s.recProvider.GetReceiptsCache().RemoveLessThan(blockNumber)
-	// Notify the prefetcher so it knows to start filling from blockNumber onward.
-	// Without this, the prefetcher may be mid-batch on older blocks while the
-	// pipeline has already advanced, causing cache misses.
-	if s.isPreFetchReceiptsRunning.Load() {
-		s.log.Info("ClearReceiptsCacheBefore notifying prefetcher", "block", blockNumber)
-		_ = s.GoOrUpdatePreFetchReceipts(context.Background(), blockNumber)
-	}
 }
 
 func (s *L1Client) Close() {
