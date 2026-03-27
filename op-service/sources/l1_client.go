@@ -43,7 +43,7 @@ func L1ClientDefaultConfig(config *rollup.Config, trustRPC bool, kind RPCProvide
 			HeadersCacheSize:      span,
 			PayloadsCacheSize:     span,
 			MaxRequestsPerBatch:   20, // TODO: tune batch param
-			MaxConcurrentRequests: 20,
+			MaxConcurrentRequests: 40,
 			TrustRPC:              trustRPC,
 			MustBePostMerge:       false,
 			RPCProviderKind:       kind,
@@ -292,7 +292,7 @@ func (s *L1Client) GoOrUpdatePreFetchReceipts(ctx context.Context, l1Start uint6
 					}
 
 					var taskCount int
-					maxConcurrent := s.maxConcurrentRequests / 2
+					maxConcurrent := s.maxConcurrentRequests
 					if blockRef.Number-currentL1Block >= uint64(maxConcurrent) {
 						taskCount = maxConcurrent
 					} else {
