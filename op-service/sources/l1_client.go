@@ -136,12 +136,6 @@ func (s *L1Client) L1BlockRefByLabel(ctx context.Context, label eth.BlockLabel) 
 func (s *L1Client) L1BlockRefByNumber(ctx context.Context, num uint64) (eth.L1BlockRef, error) {
 	if v, ok := s.blockRefByNumberCache.Load(num); ok {
 		ref := v.(eth.L1BlockRef)
-		s.log.Debug("L1BlockRefByNumber cache hit", "number", num)
-		// Trigger next batch prefetch window.
-		select {
-		case s.blockRefPrefetchChan <- num + 1:
-		default:
-		}
 		return ref, nil
 	}
 	info, err := s.InfoByNumber(ctx, num)
@@ -150,12 +144,17 @@ func (s *L1Client) L1BlockRefByNumber(ctx context.Context, num uint64) (eth.L1Bl
 	}
 	ref := eth.InfoToL1BlockRef(info)
 	s.l1BlockRefsCache.Add(ref.Hash, ref)
-	// Trigger async batch prefetch of subsequent headers so future AdvanceL1Block calls hit cache.
+	return ref, nil
+}
+
+// TriggerBlockRefPrefetch signals the batch prefetcher to fetch headers starting at nextNum.
+// Should only be called from bq's AdvanceL1Block to avoid polluting the prefetch position
+// with sequencer or initialization calls.
+func (s *L1Client) TriggerBlockRefPrefetch(nextNum uint64) {
 	select {
-	case s.blockRefPrefetchChan <- num + 1:
+	case s.blockRefPrefetchChan <- nextNum:
 	default:
 	}
-	return ref, nil
 }
 
 // InvalidateBlockRefByNumberCache removes entries >= fromNumber from blockRefByNumberCache.
@@ -184,7 +183,6 @@ func (s *L1Client) startBlockRefPrefetcher(ctx context.Context) {
 				if _, ok := s.blockRefByNumberCache.Load(startNum); ok {
 					continue
 				}
-				s.log.Debug("blockref batch prefetch start", "start", startNum, "count", batchSize)
 				headers := make([]*RPCHeader, batchSize)
 				elems := make([]rpc.BatchElem, batchSize)
 				for i := 0; i < batchSize; i++ {

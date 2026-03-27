@@ -29,6 +29,13 @@ type blockRefCacheInvalidator interface {
 	InvalidateBlockRefByNumberCache(fromNumber uint64)
 }
 
+// blockRefPrefetchTrigger is an optional interface for L1 sources that support
+// batch prefetching of block headers. Only bq's AdvanceL1Block should trigger
+// this to avoid polluting the prefetch position with other callers.
+type blockRefPrefetchTrigger interface {
+	TriggerBlockRefPrefetch(nextNum uint64)
+}
+
 type L1Traversal struct {
 	block    eth.L1BlockRef
 	done     bool
@@ -94,6 +101,11 @@ func (l1t *L1Traversal) AdvanceL1Block(ctx context.Context) error {
 
 	l1t.block = nextL1Origin
 	l1t.done = false
+	// Trigger batch prefetch of subsequent headers so future AdvanceL1Block calls hit cache.
+	// Only triggered here (bq path) to avoid polluting prefetch position with sequencer calls.
+	if p, ok := l1t.l1Blocks.(blockRefPrefetchTrigger); ok {
+		p.TriggerBlockRefPrefetch(nextL1Origin.Number + 1)
+	}
 	return nil
 }
 
