@@ -1,11 +1,12 @@
 // SPDX-License-Identifier: MIT
 pragma solidity 0.8.15;
 
-import { CommonTest } from "test/setup/CommonTest.sol";
-import { EIP1967Helper } from "test/mocks/EIP1967Helper.sol";
-import { L2OutputOracle } from "src/L1/L2OutputOracle.sol";
-import { L2OutputOracleProposerChallengerRotator } from "src/L1/L2OutputOracleProposerChallengerRotator.sol";
-import { ProxyAdmin } from "src/universal/ProxyAdmin.sol";
+import {CommonTest} from "test/setup/CommonTest.sol";
+import {EIP1967Helper} from "test/mocks/EIP1967Helper.sol";
+import {L2OutputOracle} from "src/L1/L2OutputOracle.sol";
+import {L2OutputOracleProposerChallengerRotator} from "src/L1/L2OutputOracleProposerChallengerRotator.sol";
+import {ProxyAdmin} from "src/universal/ProxyAdmin.sol";
+import {Vm} from "forge-std/Vm.sol";
 
 contract L2OutputOracleProposerChallengerRotator_Test is CommonTest {
     L2OutputOracleProposerChallengerRotator internal rotator;
@@ -37,9 +38,17 @@ contract L2OutputOracleProposerChallengerRotator_Test is CommonTest {
         vm.prank(proxyAdmin.owner());
         proxyAdmin.upgrade(payable(address(l2OutputOracle)), address(rotator));
 
+        vm.recordLogs();
         vm.prank(oldProposer);
         L2OutputOracleProposerChallengerRotator(address(l2OutputOracle))
-            .rotateProposerAndChallenger({ _proposer: newProposer, _challenger: newChallenger });
+            .rotateProposerAndChallenger({_proposer: newProposer, _challenger: newChallenger});
+        Vm.Log[] memory entries = vm.getRecordedLogs();
+
+        assertEq(entries.length, 1);
+        assertEq(entries[0].emitter, address(l2OutputOracle));
+        assertEq(entries[0].topics.length, 1);
+        assertEq(entries[0].topics[0], keccak256("ProposerAndChallengerRotated(address,address,address,address)"));
+        assertEq(entries[0].data, abi.encode(oldProposer, oldChallenger, newProposer, newChallenger));
 
         assertEq(l2OutputOracle.proposer(), newProposer);
         assertEq(l2OutputOracle.challenger(), newChallenger);
@@ -52,6 +61,13 @@ contract L2OutputOracleProposerChallengerRotator_Test is CommonTest {
         assertEq(l2OutputOracle.nextOutputIndex(), nextOutputIndex);
         assertTrue(oldProposer != l2OutputOracle.proposer());
         assertTrue(oldChallenger != l2OutputOracle.challenger());
+
+        vm.prank(oldProposer);
+        vm.expectRevert("L2OutputOracle: only old proposer can rotate");
+        L2OutputOracleProposerChallengerRotator(address(l2OutputOracle))
+            .rotateProposerAndChallenger({
+                _proposer: makeAddr("secondProposer"), _challenger: makeAddr("secondChallenger")
+            });
 
         vm.prank(proxyAdmin.owner());
         proxyAdmin.upgrade(payable(address(l2OutputOracle)), originalImplementation);
@@ -68,7 +84,7 @@ contract L2OutputOracleProposerChallengerRotator_Test is CommonTest {
         vm.prank(makeAddr("notOldProposer"));
         vm.expectRevert("L2OutputOracle: only old proposer can rotate");
         L2OutputOracleProposerChallengerRotator(address(l2OutputOracle))
-            .rotateProposerAndChallenger({ _proposer: makeAddr("newProposer"), _challenger: makeAddr("newChallenger") });
+            .rotateProposerAndChallenger({_proposer: makeAddr("newProposer"), _challenger: makeAddr("newChallenger")});
     }
 
     function test_rotateProposerAndChallenger_zeroAddress_reverts() external {
@@ -80,11 +96,11 @@ contract L2OutputOracleProposerChallengerRotator_Test is CommonTest {
         vm.prank(oldProposer);
         vm.expectRevert("L2OutputOracle: proposer cannot be zero address");
         L2OutputOracleProposerChallengerRotator(address(l2OutputOracle))
-            .rotateProposerAndChallenger({ _proposer: address(0), _challenger: makeAddr("newChallenger") });
+            .rotateProposerAndChallenger({_proposer: address(0), _challenger: makeAddr("newChallenger")});
 
         vm.prank(oldProposer);
         vm.expectRevert("L2OutputOracle: challenger cannot be zero address");
         L2OutputOracleProposerChallengerRotator(address(l2OutputOracle))
-            .rotateProposerAndChallenger({ _proposer: makeAddr("newProposer"), _challenger: address(0) });
+            .rotateProposerAndChallenger({_proposer: makeAddr("newProposer"), _challenger: address(0)});
     }
 }
