@@ -95,7 +95,7 @@ COPY --from=rust-build /root/.cargo/bin/just /usr/local/bin/just
 COPY .nvmrc .nvmrc
 COPY ./versions.json ./versions.json
 
-ENV NODE_MAJOR=20
+ENV NODE_MAJOR=22
 
 RUN /bin/sh -c set -eux; \
   apt-get update; \
@@ -107,7 +107,7 @@ RUN /bin/sh -c set -eux; \
   chmod a+r /etc/apt/keyrings/docker.gpg; \
   echo "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.gpg] https://download.docker.com/linux/debian $(. /etc/os-release && echo "$VERSION_CODENAME") stable" | tee /etc/apt/sources.list.d/docker.list > /dev/null; \
   apt-get update; \
-  apt-get install -y nodejs docker-ce-cli; \
+  apt-get install -y nodejs=22.23.4-1nodesource1 docker-ce-cli; \
   ln -s /usr/local/go/bin/gofmt /usr/local/bin/gofmt; \
   npm i -g depcheck; \
   pip install capstone pyelftools; \
